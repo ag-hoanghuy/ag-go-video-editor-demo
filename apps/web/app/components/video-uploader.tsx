@@ -21,12 +21,12 @@ interface UploadState {
 }
 
 const phaseLabels: Record<UploadPhase, string> = {
-  empty: 'Chưa chọn file',
-  ready: 'Sẵn sàng tải lên',
-  preparing: 'Đang chuẩn bị tải lên...',
-  uploading: 'Đang tải lên...',
-  success: 'Tải lên thành công',
-  failure: 'Tải lên thất bại',
+  empty: 'Chưa chọn video nguồn',
+  ready: 'Sẵn sàng tải video nguồn',
+  preparing: 'Đang chuẩn bị video nguồn...',
+  uploading: 'Đang tải video nguồn...',
+  success: 'Video nguồn đã tải lên',
+  failure: 'Tải video nguồn thất bại',
 };
 
 const initialUploadState: UploadState = {
@@ -72,6 +72,7 @@ export function VideoUploader() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>(initialUploadState);
   const isBusy = uploadState.phase === 'preparing' || uploadState.phase === 'uploading';
+  const uploadedAsset = uploadState.uploadedAsset;
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
     const file = event.target.files?.[0];
@@ -131,82 +132,119 @@ export function VideoUploader() {
     }
   }
 
+  function handleChooseAnotherVideo(): void {
+    setSelectedFile(null);
+    setUploadState(initialUploadState);
+  }
+
   return (
     <section className="upload-panel" aria-labelledby="upload-heading">
       <div className="upload-heading-group">
         <div>
-          <p className="section-label">Upload trực tiếp lên R2</p>
-          <h2 id="upload-heading">Chọn video MP4</h2>
+          <p className="section-label">Video nguồn trên Cloudflare R2</p>
+          <h2 id="upload-heading">
+            {uploadedAsset ? 'Video nguồn đã tải lên' : 'Chọn video nguồn MP4'}
+          </h2>
         </div>
         <span className={`upload-status upload-status-${uploadState.phase}`} role="status">
           {phaseLabels[uploadState.phase]}
         </span>
       </div>
 
-      <form onSubmit={(event) => void handleSubmit(event)}>
-        <label className={`file-picker${isBusy ? ' file-picker-disabled' : ''}`}>
-          <span>Chọn file video</span>
-          <span className="file-picker-action">Chọn tệp MP4</span>
-          <input
-            type="file"
-            accept="video/mp4,.mp4"
-            onChange={handleFileChange}
-            disabled={isBusy}
-          />
-        </label>
+      {uploadedAsset ? (
+        <div>
+          <div className="source-ready-actions">
+            <p>Video nguồn đã sẵn sàng để preview, chọn vùng trim và export video mới.</p>
+            <button
+              type="button"
+              className="choose-another-video"
+              onClick={handleChooseAnotherVideo}
+            >
+              Chọn video khác
+            </button>
+          </div>
 
-        {selectedFile ? (
-          <div className="file-details">
+          <ol className="editor-flow" aria-label="Quy trình chỉnh sửa video">
+            <li>Video nguồn đã tải lên</li>
+            <li>Preview</li>
+            <li>Chọn vùng trim</li>
+            <li>Export video</li>
+            <li>Xem / tải output</li>
+          </ol>
+
+          {selectedFile ? (
+            <div className="file-details">
+              <div>
+                <span className="detail-label">Tên file nguồn</span>
+                <strong>{selectedFile.name}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Dung lượng</span>
+                <strong>{formatFileSize(selectedFile.size)}</strong>
+              </div>
+            </div>
+          ) : null}
+
+          <dl className="asset-details">
             <div>
-              <span className="detail-label">Tên file</span>
-              <strong>{selectedFile.name}</strong>
+              <dt>Asset ID</dt>
+              <dd>{uploadedAsset.assetId}</dd>
             </div>
             <div>
-              <span className="detail-label">Dung lượng</span>
-              <strong>{formatFileSize(selectedFile.size)}</strong>
+              <dt>Object key</dt>
+              <dd>{uploadedAsset.objectKey}</dd>
             </div>
-          </div>
-        ) : (
-          <p className="empty-file-message">Chưa có file MP4 nào được chọn.</p>
-        )}
+          </dl>
 
-        <div className="progress-group">
-          <div className="progress-label">
-            <span>Tiến trình tải lên</span>
-            <strong>{uploadState.progress}%</strong>
-          </div>
-          <progress value={uploadState.progress} max="100">
-            {uploadState.progress}%
-          </progress>
+          <VideoPreview key={uploadedAsset.assetId} assetId={uploadedAsset.assetId} />
         </div>
-
-        {uploadState.errorMessage ? (
-          <p className="upload-message upload-message-error">{uploadState.errorMessage}</p>
-        ) : null}
-
-        {uploadState.uploadedAsset ? (
-          <>
-            <dl className="asset-details">
-              <div>
-                <dt>Asset ID</dt>
-                <dd>{uploadState.uploadedAsset.assetId}</dd>
-              </div>
-              <div>
-                <dt>Object key</dt>
-                <dd>{uploadState.uploadedAsset.objectKey}</dd>
-              </div>
-            </dl>
-            <VideoPreview
-              key={uploadState.uploadedAsset.assetId}
-              assetId={uploadState.uploadedAsset.assetId}
+      ) : (
+        <form onSubmit={(event) => void handleSubmit(event)}>
+          <label className={`file-picker${isBusy ? ' file-picker-disabled' : ''}`}>
+            <span>Chọn file video nguồn</span>
+            <span className="file-picker-action">Chọn tệp MP4</span>
+            <input
+              type="file"
+              accept="video/mp4,.mp4"
+              onChange={handleFileChange}
+              disabled={isBusy}
             />
-          </>
-        ) : null}
+          </label>
 
-        <button type="submit" disabled={!selectedFile || isBusy}>
-          {isBusy ? 'Đang xử lý...' : 'Tải video lên R2'}
-        </button>
-      </form>
+          {selectedFile ? (
+            <div className="file-details">
+              <div>
+                <span className="detail-label">Tên file nguồn</span>
+                <strong>{selectedFile.name}</strong>
+              </div>
+              <div>
+                <span className="detail-label">Dung lượng</span>
+                <strong>{formatFileSize(selectedFile.size)}</strong>
+              </div>
+            </div>
+          ) : (
+            <p className="empty-file-message">Chưa có file MP4 nguồn nào được chọn.</p>
+          )}
+
+          <div className="progress-group">
+            <div className="progress-label">
+              <span>Tiến trình tải video nguồn</span>
+              <strong>{uploadState.progress}%</strong>
+            </div>
+            <progress value={uploadState.progress} max="100">
+              {uploadState.progress}%
+            </progress>
+          </div>
+
+          {uploadState.errorMessage ? (
+            <p className="upload-message upload-message-error">{uploadState.errorMessage}</p>
+          ) : null}
+
+          <button type="submit" className="source-upload-button" disabled={!selectedFile || isBusy}>
+            {isBusy ? 'Đang tải video nguồn...' : 'Tải video nguồn lên R2'}
+          </button>
+        </form>
+      )}
     </section>
   );
 }
