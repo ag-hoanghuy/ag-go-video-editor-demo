@@ -21,3 +21,19 @@ export interface GetAssetPlaybackUrlResponse {
   playbackUrl: string;
   expiresIn: number;
 }
+
+export interface VideoTrimInstruction {
+  start: number;
+  end: number;
+}
+
+export interface CreateRenderRequest {
+  assetId: string;
+  trim: VideoTrimInstruction;
+}
+
+export interface CreateRenderResponse {
+  renderId: string;
+  status: 'completed';
+  outputKey: string;
+}

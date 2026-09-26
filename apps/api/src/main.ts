@@ -7,18 +7,24 @@ const defaultPort = 3001;
 const defaultWebUrl = 'http://localhost:3000';
 
 function createValidationException(errors: ValidationError[]): BadRequestException {
-  const messages = errors.flatMap((error) =>
-    Object.entries(error.constraints ?? {}).map(([constraintName, message]) =>
-      constraintName === 'whitelistValidation'
-        ? `${error.property} không được phép xuất hiện.`
-        : message,
-    ),
-  );
+  const messages = getValidationMessages(errors);
 
   return new BadRequestException({
     statusCode: 400,
     error: 'Yêu cầu không hợp lệ',
     message: messages,
+  });
+}
+
+function getValidationMessages(errors: ValidationError[]): string[] {
+  return errors.flatMap((error) => {
+    const ownMessages = Object.entries(error.constraints ?? {}).map(([constraintName, message]) =>
+      constraintName === 'whitelistValidation'
+        ? `${error.property} không được phép xuất hiện.`
+        : message,
+    );
+
+    return [...ownMessages, ...getValidationMessages(error.children ?? [])];
   });
 }
 

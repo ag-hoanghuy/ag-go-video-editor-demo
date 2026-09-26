@@ -6,12 +6,7 @@ import type {
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
-
-const assetObjectPrefix = 'video-editor-demo/assets';
-
-function createAssetObjectKey(assetId: string): string {
-  return `${assetObjectPrefix}/${assetId}/original.mp4`;
-}
+import { createOriginalAssetObjectKey } from './asset-object-key';
 
 @Injectable()
 export class AssetsService {
@@ -19,7 +14,7 @@ export class AssetsService {
 
   async createUploadUrl(contentType: VideoContentType): Promise<CreateAssetUploadUrlResponse> {
     const assetId = randomUUID();
-    const objectKey = createAssetObjectKey(assetId);
+    const objectKey = createOriginalAssetObjectKey(assetId);
     const presignedUrl = await this.storageService.createPresignedPutUrl({
       contentType,
       objectKey,
@@ -34,7 +29,7 @@ export class AssetsService {
   }
 
   async getPlaybackUrl(assetId: string): Promise<GetAssetPlaybackUrlResponse> {
-    const objectKey = createAssetObjectKey(assetId);
+    const objectKey = createOriginalAssetObjectKey(assetId);
     const presignedUrl = await this.storageService.createPresignedGetUrl(objectKey);
 
     return {

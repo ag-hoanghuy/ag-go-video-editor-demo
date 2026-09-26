@@ -1,9 +1,9 @@
 # AG Go Video Editor Demo
 
-Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload,
-preview và chọn khoảng thời gian cần giữ trên timeline mà không tải binary qua backend.
+Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Backend có thể nhận edit
+instruction, tải source từ Cloudflare R2 và render một video MP4 đã cắt bằng FFmpeg.
 
-**Phase hiện tại: Phase 5 — Timeline & Trim Selection**
+**Phase hiện tại: Phase 6 — FFmpeg Video Rendering**
 
 ## Tech stack
 
@@ -39,6 +39,16 @@ ag-go-video-editor-demo/
 
 - Node.js 22 trở lên
 - pnpm 12 trở lên
+- `ffmpeg` và `ffprobe` khả dụng trong `PATH`
+
+Kiểm tra FFmpeg runtime:
+
+```bash
+ffmpeg -version
+ffprobe -version
+```
+
+FFmpeg build phải hỗ trợ encoder H.264 `libx264` và AAC.
 
 ## Cài đặt
 
@@ -73,6 +83,7 @@ Các địa chỉ mặc định:
 - Health Check: http://localhost:3001/health
 - Upload URL: `POST http://localhost:3001/api/assets/upload-url`
 - Playback URL: `GET http://localhost:3001/api/assets/{assetId}/playback-url`
+- Render video: `POST http://localhost:3001/api/renders`
 
 Ví dụ tạo presigned PUT URL:
 
@@ -92,6 +103,27 @@ curl http://localhost:3001/api/assets/00000000-0000-4000-8000-000000000000/playb
 
 Backend chỉ nhận UUID và tự derive object key theo convention
 `video-editor-demo/assets/{assetId}/original.mp4`; client không thể cung cấp object key tùy ý.
+
+Ví dụ render đoạn từ giây 5 đến giây 12:
+
+```bash
+curl -X POST http://localhost:3001/api/renders \
+  -H "Content-Type: application/json" \
+  -d '{"assetId":"00000000-0000-4000-8000-000000000000","trim":{"start":5,"end":12}}'
+```
+
+Render chạy đồng bộ theo luồng:
+
+```text
+download source từ R2
+→ ffprobe và validate duration
+→ FFmpeg cắt/re-encode MP4
+→ upload output lên R2
+→ trả response completed
+```
+
+Output được lưu tại `video-editor-demo/renders/{renderId}/output.mp4`. API không nhận source hoặc
+output object key từ client và chưa tạo playback/download URL cho output.
 
 ### CORS cho Cloudflare R2
 
@@ -150,15 +182,20 @@ chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
   `0 <= start < end <= duration`.
 - Người dùng có thể phát riêng đoạn đã chọn hoặc đặt lại vùng chọn về toàn bộ video.
 - Upload video mới sẽ reset vùng trim về `start = 0` và `end = duration` sau khi metadata load xong.
+- `POST /api/renders` nhận `assetId` cùng `trim`, validate dữ liệu và tự derive source/output key.
+- Backend stream source từ R2 xuống file tạm, dùng `ffprobe` xác nhận khoảng trim không vượt duration.
+- FFmpeg re-encode đoạn đã chọn sang H.264/AAC MP4 với `yuv420p` và `faststart` để tương thích browser.
+- Output được stream lên R2 với `Content-Type: video/mp4`; file/thư mục tạm luôn được cleanup.
+- Render synchronous và trả `{ renderId, status: "completed", outputKey }` sau khi upload hoàn tất.
 
-## Ngoài scope Phase 5
+## Ngoài scope Phase 6
 
-Phase này chỉ tạo edit instruction trên frontend. Chưa cắt hoặc render file thật, chưa dùng FFmpeg,
-chưa có render/export API, multi-clip, split, concat, audio track, database hoặc persistence cho edit
-state.
+Phase này chưa có nút Export trên frontend, playback/download URL cho output, queue, worker,
+database, render persistence, progress API, multi-clip, concat, transition, text overlay hoặc audio
+editing.
 
 ## Phase tiếp theo
 
-**Phase 6 — Chưa được triển khai**
+**Phase 7 — Chưa được triển khai**
 
-Scope Phase 6 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 7 sẽ được xác định trong yêu cầu riêng.
