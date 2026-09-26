@@ -24,14 +24,14 @@ interface EditState {
 }
 
 const previewLabels: Record<PreviewPhase, string> = {
-  preparing: 'Đang chuẩn bị preview...',
-  ready: 'Preview sẵn sàng',
-  'url-error': 'Không thể lấy playback URL',
+  preparing: 'Đang chuẩn bị video...',
+  ready: 'Sẵn sàng xem trước',
+  'url-error': 'Không thể tải video xem trước',
   'playback-error': 'Video không thể phát',
 };
 
 function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Không thể lấy URL tạm thời để preview video.';
+  return error instanceof Error ? error.message : 'Không thể chuẩn bị video xem trước.';
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {
@@ -134,7 +134,7 @@ export function VideoPreview({ assetId }: VideoPreviewProps) {
     setPreviewState((currentState) => ({
       ...currentState,
       phase: 'playback-error',
-      errorMessage: 'Video không thể phát. Hãy kiểm tra object trên R2 và cấu hình CORS.',
+      errorMessage: 'Video nguồn không thể phát. Hãy kiểm tra kết nối và thử lại.',
     }));
     setIsPlayingSelection(false);
   }
@@ -236,8 +236,8 @@ export function VideoPreview({ assetId }: VideoPreviewProps) {
     <section className="preview-panel" aria-labelledby="preview-heading">
       <div className="preview-heading-group">
         <div>
-          <p className="section-label">Preview trực tiếp từ R2</p>
-          <h3 id="preview-heading">Video vừa tải lên</h3>
+          <p className="section-label">Xem trước video</p>
+          <h3 id="preview-heading">Video nguồn</h3>
         </div>
         <span className={`preview-status preview-status-${previewState.phase}`} role="status">
           {previewLabels[previewState.phase]}

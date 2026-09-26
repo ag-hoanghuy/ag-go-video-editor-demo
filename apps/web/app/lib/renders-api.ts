@@ -35,16 +35,16 @@ export async function requestRender(
       body: JSON.stringify(requestBody),
       signal,
     },
-    'Không thể kết nối tới API để render video.',
+    'Không thể kết nối để xuất video.',
   );
 
   if (!response.ok) {
-    const apiMessage = getApiErrorMessage(response.body);
-    throw new Error(apiMessage ?? `Render video thất bại (HTTP ${response.status}).`);
+    const apiMessage = response.status < 500 ? getApiErrorMessage(response.body) : null;
+    throw new Error(apiMessage ?? 'Không thể xuất video. Vui lòng thử lại.');
   }
 
   if (!isCreateRenderResponse(response.body)) {
-    throw new Error('API trả về kết quả render không hợp lệ.');
+    throw new Error('Kết quả xuất video không hợp lệ.');
   }
 
   return response.body;
@@ -57,16 +57,15 @@ export async function requestRenderPlaybackUrl(
   const response = await requestApi(
     `/api/renders/${encodeURIComponent(renderId)}/playback-url`,
     { signal },
-    'Không thể kết nối tới API để lấy playback URL của video đã export.',
+    'Không thể kết nối để chuẩn bị video đã xuất.',
   );
 
   if (!response.ok) {
-    const apiMessage = getApiErrorMessage(response.body);
-    throw new Error(apiMessage ?? `Không thể lấy playback URL output (HTTP ${response.status}).`);
+    throw new Error('Không thể tải video đã xuất. Vui lòng thử lại.');
   }
 
   if (!isRenderPlaybackUrlResponse(response.body) || response.body.renderId !== renderId) {
-    throw new Error('API trả về playback URL của output không hợp lệ.');
+    throw new Error('Không thể chuẩn bị video đã xuất.');
   }
 
   return response.body;

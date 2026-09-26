@@ -41,16 +41,16 @@ export async function requestAssetUploadUrl(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
     },
-    'Không thể kết nối tới API để chuẩn bị tải lên.',
+    'Không thể kết nối để chuẩn bị tải video nguồn.',
   );
 
   if (!response.ok) {
-    const apiMessage = getApiErrorMessage(response.body);
-    throw new Error(apiMessage ?? `API từ chối yêu cầu tải lên (HTTP ${response.status}).`);
+    const apiMessage = response.status < 500 ? getApiErrorMessage(response.body) : null;
+    throw new Error(apiMessage ?? 'Không thể chuẩn bị tải video nguồn. Vui lòng thử lại.');
   }
 
   if (!isUploadUrlResponse(response.body)) {
-    throw new Error('API trả về dữ liệu chuẩn bị tải lên không hợp lệ.');
+    throw new Error('Không thể chuẩn bị tải video nguồn.');
   }
 
   return response.body;
@@ -65,16 +65,16 @@ export async function requestAssetPlaybackUrl(
     {
       signal,
     },
-    'Không thể kết nối tới API để chuẩn bị preview.',
+    'Không thể kết nối để chuẩn bị video xem trước.',
   );
 
   if (!response.ok) {
-    const apiMessage = getApiErrorMessage(response.body);
-    throw new Error(apiMessage ?? `Không thể lấy playback URL (HTTP ${response.status}).`);
+    const apiMessage = response.status < 500 ? getApiErrorMessage(response.body) : null;
+    throw new Error(apiMessage ?? 'Không thể tải video xem trước. Vui lòng thử lại.');
   }
 
   if (!isPlaybackUrlResponse(response.body) || response.body.assetId !== assetId) {
-    throw new Error('API trả về dữ liệu preview không hợp lệ.');
+    throw new Error('Không thể chuẩn bị video xem trước.');
   }
 
   return response.body;

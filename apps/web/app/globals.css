@@ -50,25 +50,6 @@ h1 {
   font-size: 1.125rem;
 }
 
-.status {
-  display: inline-flex;
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 999px;
-  background: #eef2f8;
-  font-weight: 700;
-}
-
-.status-online {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.status-offline {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
 .upload-panel {
   margin-top: 32px;
   padding-top: 32px;
@@ -183,23 +164,20 @@ h4 {
   margin-top: 20px;
 }
 
-.file-details > div,
-.asset-details > div {
+.file-details > div {
   min-width: 0;
   padding: 14px;
   border-radius: 10px;
   background: #f4f7fb;
 }
 
-.file-details strong,
-.asset-details dd {
+.file-details strong {
   display: block;
   margin-top: 5px;
   overflow-wrap: anywhere;
 }
 
-.detail-label,
-.asset-details dt {
+.detail-label {
   color: #667085;
   font-size: 0.8rem;
   font-weight: 700;
@@ -319,18 +297,6 @@ progress::-moz-progress-bar {
   color: #60a5fa;
   content: '→';
   font-size: 1rem;
-}
-
-.asset-details {
-  display: grid;
-  gap: 10px;
-  margin: 20px 0 0;
-}
-
-.asset-details dd {
-  margin-left: 0;
-  font-family: Consolas, Monaco, monospace;
-  font-size: 0.85rem;
 }
 
 .preview-panel {
@@ -690,32 +656,6 @@ progress::-moz-progress-bar {
 
 .export-video {
   margin-top: 0;
-}
-
-.export-details {
-  display: grid;
-  gap: 10px;
-  margin: 14px 0 0;
-}
-
-.export-details > div {
-  min-width: 0;
-  padding: 12px;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.export-details dt {
-  color: #667085;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.export-details dd {
-  margin: 6px 0 0;
-  overflow-wrap: anywhere;
-  font-family: Consolas, Monaco, monospace;
-  font-size: 0.8rem;
 }
 
 .download-output {

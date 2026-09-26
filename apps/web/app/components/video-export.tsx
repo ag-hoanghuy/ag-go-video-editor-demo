@@ -22,20 +22,18 @@ interface VideoExportProps {
 interface ExportState {
   phase: ExportPhase;
   requestedTrim?: VideoTrimInstruction;
-  renderId?: string;
-  outputKey?: string;
   playbackUrl?: string;
   errorMessage?: string;
 }
 
 const exportLabels: Record<ExportPhase, string> = {
-  idle: 'Chưa export',
-  rendering: 'Đang render',
-  'preparing-output': 'Đang chuẩn bị output',
-  success: 'Render thành công',
-  'render-error': 'Render thất bại',
-  'url-error': 'Không thể lấy playback URL',
-  'playback-error': 'Video output không thể phát',
+  idle: 'Chưa xuất video',
+  rendering: 'Đang xuất video',
+  'preparing-output': 'Đang chuẩn bị video',
+  success: 'Video đã xuất xong',
+  'render-error': 'Xuất video thất bại',
+  'url-error': 'Không thể tải video đã xuất',
+  'playback-error': 'Video đã xuất không thể phát',
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -81,7 +79,7 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
         setExportState({
           phase: 'render-error',
           requestedTrim,
-          errorMessage: getErrorMessage(error, 'Không thể render video đã chọn.'),
+          errorMessage: getErrorMessage(error, 'Không thể xuất video đã chọn.'),
         });
       }
       if (requestControllerRef.current === controller) {
@@ -97,8 +95,6 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
     setExportState({
       phase: 'preparing-output',
       requestedTrim,
-      renderId: render.renderId,
-      outputKey: render.outputKey,
     });
 
     try {
@@ -107,8 +103,6 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
       setExportState({
         phase: 'success',
         requestedTrim,
-        renderId: render.renderId,
-        outputKey: render.outputKey,
         playbackUrl: playback.playbackUrl,
       });
     } catch (error) {
@@ -116,11 +110,9 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
         setExportState({
           phase: 'url-error',
           requestedTrim,
-          renderId: render.renderId,
-          outputKey: render.outputKey,
           errorMessage: getErrorMessage(
             error,
-            'Render đã hoàn tất nhưng không thể lấy playback URL của output.',
+            'Video đã được xuất nhưng không thể chuẩn bị để xem trước.',
           ),
         });
       }
@@ -135,19 +127,19 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
     setExportState((currentState) => ({
       ...currentState,
       phase: 'playback-error',
-      errorMessage:
-        'Video đã export không thể phát. Hãy kiểm tra object trên R2, thời hạn URL và cấu hình CORS.',
+      errorMessage: 'Video đã xuất không thể phát. Hãy kiểm tra kết nối và thử lại.',
     }));
   }
 
-  const hasCurrentOutput = exportState.playbackUrl !== undefined && !isOutputStale;
+  const hasExportedOutput = exportState.playbackUrl !== undefined;
+  const hasCurrentOutput = hasExportedOutput && !isOutputStale;
 
   return (
     <section className="export-panel" aria-labelledby="export-heading">
       <div className="export-heading-group">
         <div>
-          <p className="section-label">FFmpeg export</p>
-          <h4 id="export-heading">Xuất đoạn video đã chọn</h4>
+          <p className="section-label">Xuất video</p>
+          <h4 id="export-heading">Tạo video từ vùng đã chọn</h4>
         </div>
         <span
           className={`export-status ${
@@ -160,8 +152,8 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
       </div>
 
       <p className="export-description">
-        Đoạn {formatTimelineTime(trim.start)} → {formatTimelineTime(trim.end)} sẽ được render đồng
-        bộ trên backend.
+        Đoạn {formatTimelineTime(trim.start)} → {formatTimelineTime(trim.end)} sẽ được dùng để tạo
+        video mới.
       </p>
 
       <button
@@ -171,28 +163,30 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
         onClick={() => void handleExport()}
       >
         {isBusy
-          ? 'Đang render video...'
+          ? 'Đang xuất video...'
           : isOutputStale
-            ? 'Export lại vùng chọn mới'
-            : 'Export video'}
+            ? 'Export vùng chọn mới'
+            : hasExportedOutput
+              ? 'Export lại video'
+              : 'Export video'}
       </button>
 
       {exportState.phase === 'rendering' ? (
         <p className="export-message" role="status">
-          Backend đang tải source, kiểm tra duration và render video. Vui lòng chờ...
+          Đang tạo video từ vùng đã chọn. Vui lòng chờ...
         </p>
       ) : null}
 
       {exportState.phase === 'preparing-output' ? (
         <p className="export-message" role="status">
-          Render đã hoàn tất. Đang lấy playback URL của output...
+          Video đã được tạo. Đang chuẩn bị xem trước...
         </p>
       ) : null}
 
       {isOutputStale ? (
         <p className="export-message export-message-warning" role="status">
-          Vùng trim đã thay đổi. Kết quả cũ không còn đại diện cho vùng chọn hiện tại; hãy export
-          lại để xem output mới.
+          Vùng trim đã thay đổi. Video đã xuất trước đó không còn khớp với vùng chọn hiện tại; hãy
+          export lại để xem kết quả mới.
         </p>
       ) : null}
 
@@ -216,25 +210,14 @@ export function VideoExport({ assetId, trim }: VideoExportProps) {
             Trình duyệt của bạn không hỗ trợ phát video HTML5.
           </video>
 
-          <dl className="export-details">
-            <div>
-              <dt>Render ID</dt>
-              <dd>{exportState.renderId}</dd>
-            </div>
-            <div>
-              <dt>Output key</dt>
-              <dd>{exportState.outputKey}</dd>
-            </div>
-          </dl>
-
           <a
             className="download-output"
             href={exportState.playbackUrl}
-            download={`video-export-${exportState.renderId}.mp4`}
+            download="video-da-xuat.mp4"
             target="_blank"
             rel="noreferrer"
           >
-            Tải video đã export
+            Tải video
           </a>
         </div>
       ) : null}

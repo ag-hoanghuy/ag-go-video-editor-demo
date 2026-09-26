@@ -222,11 +222,11 @@ export function VideoTrimTimeline({
 
       <dl className="trim-details">
         <div>
-          <dt>Thời gian bắt đầu</dt>
+          <dt>Bắt đầu</dt>
           <dd>{formatTimelineTime(trim.start)}</dd>
         </div>
         <div>
-          <dt>Thời gian kết thúc</dt>
+          <dt>Kết thúc</dt>
           <dd>{formatTimelineTime(trim.end)}</dd>
         </div>
         <div>

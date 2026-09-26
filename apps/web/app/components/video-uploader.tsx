@@ -40,7 +40,7 @@ function validateVideoFile(file: File): string | null {
   }
 
   if (file.type !== 'video/mp4') {
-    return 'Tệp đã chọn phải có MIME video/mp4.';
+    return 'Tệp đã chọn phải đúng định dạng video MP4.';
   }
 
   return null;
@@ -141,7 +141,7 @@ export function VideoUploader() {
     <section className="upload-panel" aria-labelledby="upload-heading">
       <div className="upload-heading-group">
         <div>
-          <p className="section-label">Video nguồn trên Cloudflare R2</p>
+          <p className="section-label">Video nguồn</p>
           <h2 id="upload-heading">
             {uploadedAsset ? 'Video nguồn đã tải lên' : 'Chọn video nguồn MP4'}
           </h2>
@@ -154,7 +154,7 @@ export function VideoUploader() {
       {uploadedAsset ? (
         <div>
           <div className="source-ready-actions">
-            <p>Video nguồn đã sẵn sàng để preview, chọn vùng trim và export video mới.</p>
+            <p>Video nguồn đã sẵn sàng để xem trước, chọn vùng cắt và xuất video mới.</p>
             <button
               type="button"
               className="choose-another-video"
@@ -165,11 +165,11 @@ export function VideoUploader() {
           </div>
 
           <ol className="editor-flow" aria-label="Quy trình chỉnh sửa video">
-            <li>Video nguồn đã tải lên</li>
-            <li>Preview</li>
+            <li>Video nguồn</li>
+            <li>Xem trước</li>
             <li>Chọn vùng trim</li>
-            <li>Export video</li>
-            <li>Xem / tải output</li>
+            <li>Xuất video</li>
+            <li>Xem / tải video đã xuất</li>
           </ol>
 
           {selectedFile ? (
@@ -184,17 +184,6 @@ export function VideoUploader() {
               </div>
             </div>
           ) : null}
-
-          <dl className="asset-details">
-            <div>
-              <dt>Asset ID</dt>
-              <dd>{uploadedAsset.assetId}</dd>
-            </div>
-            <div>
-              <dt>Object key</dt>
-              <dd>{uploadedAsset.objectKey}</dd>
-            </div>
-          </dl>
 
           <VideoPreview key={uploadedAsset.assetId} assetId={uploadedAsset.assetId} />
         </div>
@@ -241,7 +230,7 @@ export function VideoUploader() {
           ) : null}
 
           <button type="submit" className="source-upload-button" disabled={!selectedFile || isBusy}>
-            {isBusy ? 'Đang tải video nguồn...' : 'Tải video nguồn lên R2'}
+            {isBusy ? 'Đang tải video nguồn...' : 'Tải video nguồn'}
           </button>
         </form>
       )}

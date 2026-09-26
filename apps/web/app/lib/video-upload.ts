@@ -21,10 +21,10 @@ export function uploadVideoToR2(
         return;
       }
 
-      reject(new Error(`R2 từ chối file tải lên (HTTP ${request.status}).`));
+      reject(new Error('Dịch vụ lưu trữ từ chối video nguồn. Vui lòng thử lại.'));
     });
     request.addEventListener('error', () => {
-      reject(new Error('Không thể tải file lên R2. Hãy kiểm tra kết nối và cấu hình CORS.'));
+      reject(new Error('Không thể tải video nguồn lên. Hãy kiểm tra kết nối và thử lại.'));
     });
     request.addEventListener('abort', () => {
       reject(new Error('Quá trình tải file lên đã bị hủy.'));
