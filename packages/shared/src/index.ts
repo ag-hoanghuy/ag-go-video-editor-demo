@@ -37,3 +37,9 @@ export interface CreateRenderResponse {
   status: 'completed';
   outputKey: string;
 }
+
+export interface GetRenderPlaybackUrlResponse {
+  renderId: string;
+  playbackUrl: string;
+  expiresIn: number;
+}

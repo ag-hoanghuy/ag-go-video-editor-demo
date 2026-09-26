@@ -1,6 +1,7 @@
 import type {
   CreateRenderRequest,
   CreateRenderResponse,
+  GetRenderPlaybackUrlResponse,
   VideoContentType,
 } from '@ag-go-video-editor/shared';
 import {
@@ -16,13 +17,9 @@ import { join } from 'node:path';
 import { createOriginalAssetObjectKey } from '../assets/asset-object-key';
 import { FfmpegService } from '../ffmpeg/ffmpeg.service';
 import { StorageService } from '../storage/storage.service';
+import { createRenderOutputObjectKey } from './render-object-key';
 
-const renderObjectPrefix = 'video-editor-demo/renders';
 const videoContentType: VideoContentType = 'video/mp4';
-
-function createRenderOutputKey(renderId: string): string {
-  return `${renderObjectPrefix}/${renderId}/output.mp4`;
-}
 
 @Injectable()
 export class RendersService {
@@ -34,7 +31,7 @@ export class RendersService {
   async createRender(request: CreateRenderRequest): Promise<CreateRenderResponse> {
     const renderId = randomUUID();
     const sourceKey = createOriginalAssetObjectKey(request.assetId);
-    const outputKey = createRenderOutputKey(renderId);
+    const outputKey = createRenderOutputObjectKey(renderId);
     let temporaryDirectory: string | undefined;
 
     try {
@@ -68,6 +65,26 @@ export class RendersService {
       if (temporaryDirectory) {
         await this.removeTemporaryDirectory(temporaryDirectory);
       }
+    }
+  }
+
+  async getPlaybackUrl(renderId: string): Promise<GetRenderPlaybackUrlResponse> {
+    const outputKey = createRenderOutputObjectKey(renderId);
+
+    try {
+      const presignedUrl = await this.storageService.createPresignedGetUrl(outputKey);
+
+      return {
+        renderId,
+        playbackUrl: presignedUrl.url,
+        expiresIn: presignedUrl.expiresIn,
+      };
+    } catch {
+      throw new InternalServerErrorException({
+        statusCode: 500,
+        error: 'Không thể chuẩn bị video đã export',
+        message: 'Không thể tạo playback URL cho video đã export.',
+      });
     }
   }
 

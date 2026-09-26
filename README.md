@@ -1,9 +1,9 @@
 # AG Go Video Editor Demo
 
-Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Backend có thể nhận edit
-instruction, tải source từ Cloudflare R2 và render một video MP4 đã cắt bằng FFmpeg.
+Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload,
+preview, chọn vùng trim, export bằng FFmpeg và xem hoặc tải output trực tiếp từ Cloudflare R2.
 
-**Phase hiện tại: Phase 6 — FFmpeg Video Rendering**
+**Phase hiện tại: Phase 7 — Export Video End-to-End**
 
 ## Tech stack
 
@@ -84,6 +84,7 @@ Các địa chỉ mặc định:
 - Upload URL: `POST http://localhost:3001/api/assets/upload-url`
 - Playback URL: `GET http://localhost:3001/api/assets/{assetId}/playback-url`
 - Render video: `POST http://localhost:3001/api/renders`
+- Render output URL: `GET http://localhost:3001/api/renders/{renderId}/playback-url`
 
 Ví dụ tạo presigned PUT URL:
 
@@ -123,7 +124,28 @@ download source từ R2
 ```
 
 Output được lưu tại `video-editor-demo/renders/{renderId}/output.mp4`. API không nhận source hoặc
-output object key từ client và chưa tạo playback/download URL cho output.
+output object key từ client.
+
+Ví dụ tạo presigned GET URL cho output đã render:
+
+```bash
+curl http://localhost:3001/api/renders/00000000-0000-4000-8000-000000000000/playback-url
+```
+
+Backend validate `renderId` là UUID v4, tự derive output key và trả playback URL tạm thời. Frontend
+dùng URL này để preview hoặc tải video trực tiếp từ R2; binary output không đi qua NestJS API.
+
+Luồng end-to-end hiện tại:
+
+```text
+upload source
+→ preview
+→ chọn trim
+→ export
+→ backend FFmpeg render
+→ output lên R2
+→ preview/download output
+```
 
 ### CORS cho Cloudflare R2
 
@@ -187,15 +209,22 @@ chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
 - FFmpeg re-encode đoạn đã chọn sang H.264/AAC MP4 với `yuv420p` và `faststart` để tương thích browser.
 - Output được stream lên R2 với `Content-Type: video/mp4`; file/thư mục tạm luôn được cleanup.
 - Render synchronous và trả `{ renderId, status: "completed", outputKey }` sau khi upload hoàn tất.
+- Frontend gửi trực tiếp edit state hiện tại tới `POST /api/renders` khi người dùng chọn Export.
+- Trong khi backend render đồng bộ, nút Export bị disable và UI chỉ hiển thị trạng thái, không giả lập
+  phần trăm tiến trình.
+- `GET /api/renders/:renderId/playback-url` validate UUID, tự derive output key và trả presigned GET URL.
+- Video output có thể được preview bằng HTML5 `<video controls>` hoặc tải xuống trực tiếp từ R2.
+- Khi trim thay đổi, output cũ được đánh dấu không còn đại diện cho vùng chọn hiện tại và yêu cầu export
+  lại; upload source mới sẽ reset toàn bộ export state.
+- Frontend phân biệt lỗi render, lỗi lấy playback URL và lỗi phát video output.
 
-## Ngoài scope Phase 6
+## Ngoài scope Phase 7
 
-Phase này chưa có nút Export trên frontend, playback/download URL cho output, queue, worker,
-database, render persistence, progress API, multi-clip, concat, transition, text overlay hoặc audio
-editing.
+Phase này chưa có queue, worker, render progress realtime, database, render history, danh sách export,
+background retry, multi-clip, concat, transition, text overlay hoặc audio editing.
 
 ## Phase tiếp theo
 
-**Phase 7 — Chưa được triển khai**
+**Phase 8 — Chưa được triển khai**
 
-Scope Phase 7 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 8 sẽ được xác định trong yêu cầu riêng.

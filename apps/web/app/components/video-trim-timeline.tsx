@@ -1,12 +1,10 @@
 'use client';
 
+import type { VideoTrimInstruction } from '@ag-go-video-editor/shared';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { useRef } from 'react';
 
-export interface TrimSelection {
-  start: number;
-  end: number;
-}
+export type TrimSelection = VideoTrimInstruction;
 
 interface VideoTrimTimelineProps {
   currentTime: number;

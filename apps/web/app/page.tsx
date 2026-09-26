@@ -5,7 +5,7 @@ export default function HomePage() {
   return (
     <main>
       <section className="card">
-        <p className="eyebrow">Phase 5 — Timeline &amp; Trim Selection</p>
+        <p className="eyebrow">Phase 7 — Export Video End-to-End</p>
         <h1>AG Go Video Editor Demo</h1>
         <p className="description">Trình chỉnh sửa video trực tuyến</p>
         <ApiHealthStatus />

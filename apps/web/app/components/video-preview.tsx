@@ -3,6 +3,7 @@
 import type { SyntheticEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { requestAssetPlaybackUrl } from '../lib/assets-api';
+import { VideoExport } from './video-export';
 import { formatTimelineTime, type TrimSelection, VideoTrimTimeline } from './video-trim-timeline';
 
 type PreviewPhase = 'preparing' | 'ready' | 'url-error' | 'playback-error';
@@ -267,18 +268,21 @@ export function VideoPreview({ assetId }: VideoPreviewProps) {
       ) : null}
 
       {duration !== undefined && editState ? (
-        <VideoTrimTimeline
-          currentTime={currentTime}
-          duration={duration}
-          isPlayingSelection={isPlayingSelection}
-          minimumDuration={Math.min(0.1, duration)}
-          trim={editState.trim}
-          onEndChange={handleEndChange}
-          onPlaySelection={handlePlaySelection}
-          onReset={handleResetSelection}
-          onSeek={seekVideo}
-          onStartChange={handleStartChange}
-        />
+        <>
+          <VideoTrimTimeline
+            currentTime={currentTime}
+            duration={duration}
+            isPlayingSelection={isPlayingSelection}
+            minimumDuration={Math.min(0.1, duration)}
+            trim={editState.trim}
+            onEndChange={handleEndChange}
+            onPlaySelection={handlePlaySelection}
+            onReset={handleResetSelection}
+            onSeek={seekVideo}
+            onStartChange={handleStartChange}
+          />
+          <VideoExport assetId={editState.assetId} trim={editState.trim} />
+        </>
       ) : null}
 
       {hasError ? (
