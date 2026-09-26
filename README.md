@@ -1,9 +1,9 @@
 # AG Go Video Editor Demo
 
-Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Backend có thể tạo URL
-tạm thời để upload và đọc object trực tiếp từ Cloudflare R2.
+Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể chọn
+video MP4 trên web và upload trực tiếp từ browser lên Cloudflare R2 bằng presigned URL.
 
-**Phase hiện tại: Phase 2 — Cloudflare R2 Integration**
+**Phase hiện tại: Phase 3 — Video Upload UI**
 
 ## Tech stack
 
@@ -82,7 +82,26 @@ curl -X POST http://localhost:3001/api/assets/upload-url \
 ```
 
 Khi upload trực tiếp bằng URL nhận được, request PUT phải gửi header `Content-Type: video/mp4`.
-Bucket R2 cũng cần CORS phù hợp trước khi frontend thực hiện upload từ trình duyệt.
+
+### CORS cho Cloudflare R2
+
+Bucket R2 phải cho phép origin của frontend thực hiện `PUT` với header `Content-Type`. Cấu hình tối
+thiểu cho local development:
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000"],
+    "AllowedMethods": ["PUT"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Khi deploy, thay origin local bằng origin chính xác của frontend. Presigned URL hợp lệ vẫn bị browser
+chặn nếu bucket chưa có CORS phù hợp.
 
 ## Các scripts
 
@@ -106,14 +125,19 @@ Bucket R2 cũng cần CORS phù hợp trước khi frontend thực hiện upload
 - `POST /api/assets/upload-url` chỉ chấp nhận file `.mp4` với MIME `video/mp4`.
 - Server tạo UUID, kiểm soát object key dưới `video-editor-demo/assets/` và trả presigned PUT URL.
 - Storage layer hỗ trợ cả presigned PUT URL và presigned GET URL.
+- Frontend validate extension `.mp4` và MIME `video/mp4` trước khi gọi API.
+- Browser upload video trực tiếp lên R2 bằng `PUT`; binary không đi qua NestJS API.
+- UI hiển thị tên file, dung lượng, trạng thái, phần trăm tiến trình và lỗi rõ ràng.
+- Sau khi upload thành công, frontend giữ `assetId` và `objectKey` trong React state.
 
-## Ngoài scope Phase 2
+## Ngoài scope Phase 3
 
-Phase này chưa bao gồm UI upload, video preview, timeline, trimming, FFmpeg, rendering, database,
-Redis, queue, worker, authentication, Docker hay hạ tầng deployment.
+Phase này chưa bao gồm video preview hoặc playback, timeline, trimming, FFmpeg, rendering,
+database, persistence cho asset, Redis, queue, worker, authentication, Docker hay hạ tầng
+deployment.
 
 ## Phase tiếp theo
 
-**Phase 3 — Chưa được triển khai**
+**Phase 4 — Chưa được triển khai**
 
-Scope Phase 3 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 4 sẽ được xác định trong yêu cầu riêng.
