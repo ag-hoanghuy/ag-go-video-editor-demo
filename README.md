@@ -1,9 +1,9 @@
 # AG Go Video Editor Demo
 
-Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể chọn
-video MP4 trên web và upload trực tiếp từ browser lên Cloudflare R2 bằng presigned URL.
+Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload
+video MP4 và preview trực tiếp từ Cloudflare R2 bằng các presigned URL tạm thời.
 
-**Phase hiện tại: Phase 3 — Video Upload UI**
+**Phase hiện tại: Phase 4 — Video Preview**
 
 ## Tech stack
 
@@ -72,6 +72,7 @@ Các địa chỉ mặc định:
 - API: http://localhost:3001
 - Health Check: http://localhost:3001/health
 - Upload URL: `POST http://localhost:3001/api/assets/upload-url`
+- Playback URL: `GET http://localhost:3001/api/assets/{assetId}/playback-url`
 
 Ví dụ tạo presigned PUT URL:
 
@@ -83,25 +84,35 @@ curl -X POST http://localhost:3001/api/assets/upload-url \
 
 Khi upload trực tiếp bằng URL nhận được, request PUT phải gửi header `Content-Type: video/mp4`.
 
+Ví dụ tạo presigned GET URL để preview:
+
+```bash
+curl http://localhost:3001/api/assets/00000000-0000-4000-8000-000000000000/playback-url
+```
+
+Backend chỉ nhận UUID và tự derive object key theo convention
+`video-editor-demo/assets/{assetId}/original.mp4`; client không thể cung cấp object key tùy ý.
+
 ### CORS cho Cloudflare R2
 
-Bucket R2 phải cho phép origin của frontend thực hiện `PUT` với header `Content-Type`. Cấu hình tối
-thiểu cho local development:
+Bucket R2 phải cho phép origin của frontend thực hiện `PUT` để upload và `GET` để phát video trực
+tiếp. Cấu hình local development hỗ trợ cả `Content-Type` và range request khi seek:
 
 ```json
 [
   {
     "AllowedOrigins": ["http://localhost:3000"],
-    "AllowedMethods": ["PUT"],
-    "AllowedHeaders": ["Content-Type"],
-    "ExposeHeaders": ["ETag"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
     "MaxAgeSeconds": 3600
   }
 ]
 ```
 
 Khi deploy, thay origin local bằng origin chính xác của frontend. Presigned URL hợp lệ vẫn bị browser
-chặn nếu bucket chưa có CORS phù hợp.
+chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
+[Configure CORS](https://developers.cloudflare.com/r2/buckets/cors/) của Cloudflare R2.
 
 ## Các scripts
 
@@ -129,15 +140,18 @@ chặn nếu bucket chưa có CORS phù hợp.
 - Browser upload video trực tiếp lên R2 bằng `PUT`; binary không đi qua NestJS API.
 - UI hiển thị tên file, dung lượng, trạng thái, phần trăm tiến trình và lỗi rõ ràng.
 - Sau khi upload thành công, frontend giữ `assetId` và `objectKey` trong React state.
+- `GET /api/assets/:assetId/playback-url` validate UUID, tự derive object key và trả presigned GET URL.
+- Frontend dùng URL tạm thời để phát video trực tiếp từ R2 bằng HTML5 `<video>` với controls.
+- Preview hỗ trợ play, pause, seek, hiển thị duration và trạng thái lỗi bằng tiếng Việt.
+- Chọn hoặc upload video mới sẽ reset preview trước đó; playback URL không được lưu lâu dài.
 
-## Ngoài scope Phase 3
+## Ngoài scope Phase 4
 
-Phase này chưa bao gồm video preview hoặc playback, timeline, trimming, FFmpeg, rendering,
-database, persistence cho asset, Redis, queue, worker, authentication, Docker hay hạ tầng
-deployment.
+Phase này chưa bao gồm timeline, trimming, FFmpeg, rendering, database, persistence cho asset,
+Redis, queue, worker, authentication, Docker hay hạ tầng deployment.
 
 ## Phase tiếp theo
 
-**Phase 4 — Chưa được triển khai**
+**Phase 5 — Chưa được triển khai**
 
-Scope Phase 4 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 5 sẽ được xác định trong yêu cầu riêng.

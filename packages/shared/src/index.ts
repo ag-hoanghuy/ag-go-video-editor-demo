@@ -15,3 +15,9 @@ export interface CreateAssetUploadUrlResponse {
   uploadUrl: string;
   expiresIn: number;
 }
+
+export interface GetAssetPlaybackUrlResponse {
+  assetId: string;
+  playbackUrl: string;
+  expiresIn: number;
+}

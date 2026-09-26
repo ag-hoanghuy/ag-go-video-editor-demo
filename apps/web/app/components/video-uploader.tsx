@@ -2,7 +2,9 @@
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useState } from 'react';
-import { requestAssetUploadUrl, uploadVideoToR2 } from '../lib/video-upload';
+import { requestAssetUploadUrl } from '../lib/assets-api';
+import { uploadVideoToR2 } from '../lib/video-upload';
+import { VideoPreview } from './video-preview';
 
 type UploadPhase = 'empty' | 'ready' | 'preparing' | 'uploading' | 'success' | 'failure';
 
@@ -183,16 +185,22 @@ export function VideoUploader() {
         ) : null}
 
         {uploadState.uploadedAsset ? (
-          <dl className="asset-details">
-            <div>
-              <dt>Asset ID</dt>
-              <dd>{uploadState.uploadedAsset.assetId}</dd>
-            </div>
-            <div>
-              <dt>Object key</dt>
-              <dd>{uploadState.uploadedAsset.objectKey}</dd>
-            </div>
-          </dl>
+          <>
+            <dl className="asset-details">
+              <div>
+                <dt>Asset ID</dt>
+                <dd>{uploadState.uploadedAsset.assetId}</dd>
+              </div>
+              <div>
+                <dt>Object key</dt>
+                <dd>{uploadState.uploadedAsset.objectKey}</dd>
+              </div>
+            </dl>
+            <VideoPreview
+              key={uploadState.uploadedAsset.assetId}
+              assetId={uploadState.uploadedAsset.assetId}
+            />
+          </>
         ) : null}
 
         <button type="submit" disabled={!selectedFile || isBusy}>

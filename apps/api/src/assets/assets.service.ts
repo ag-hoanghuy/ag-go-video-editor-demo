@@ -1,9 +1,17 @@
-import type { CreateAssetUploadUrlResponse, VideoContentType } from '@ag-go-video-editor/shared';
+import type {
+  CreateAssetUploadUrlResponse,
+  GetAssetPlaybackUrlResponse,
+  VideoContentType,
+} from '@ag-go-video-editor/shared';
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { StorageService } from '../storage/storage.service';
 
 const assetObjectPrefix = 'video-editor-demo/assets';
+
+function createAssetObjectKey(assetId: string): string {
+  return `${assetObjectPrefix}/${assetId}/original.mp4`;
+}
 
 @Injectable()
 export class AssetsService {
@@ -11,7 +19,7 @@ export class AssetsService {
 
   async createUploadUrl(contentType: VideoContentType): Promise<CreateAssetUploadUrlResponse> {
     const assetId = randomUUID();
-    const objectKey = `${assetObjectPrefix}/${assetId}/original.mp4`;
+    const objectKey = createAssetObjectKey(assetId);
     const presignedUrl = await this.storageService.createPresignedPutUrl({
       contentType,
       objectKey,
@@ -21,6 +29,17 @@ export class AssetsService {
       assetId,
       objectKey,
       uploadUrl: presignedUrl.url,
+      expiresIn: presignedUrl.expiresIn,
+    };
+  }
+
+  async getPlaybackUrl(assetId: string): Promise<GetAssetPlaybackUrlResponse> {
+    const objectKey = createAssetObjectKey(assetId);
+    const presignedUrl = await this.storageService.createPresignedGetUrl(objectKey);
+
+    return {
+      assetId,
+      playbackUrl: presignedUrl.url,
       expiresIn: presignedUrl.expiresIn,
     };
   }
