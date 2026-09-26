@@ -1,9 +1,9 @@
 # AG Go Video Editor Demo
 
-Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload
-video MP4 và preview trực tiếp từ Cloudflare R2 bằng các presigned URL tạm thời.
+Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload,
+preview và chọn khoảng thời gian cần giữ trên timeline mà không tải binary qua backend.
 
-**Phase hiện tại: Phase 4 — Video Preview**
+**Phase hiện tại: Phase 5 — Timeline & Trim Selection**
 
 ## Tech stack
 
@@ -144,14 +144,21 @@ chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
 - Frontend dùng URL tạm thời để phát video trực tiếp từ R2 bằng HTML5 `<video>` với controls.
 - Preview hỗ trợ play, pause, seek, hiển thị duration và trạng thái lỗi bằng tiếng Việt.
 - Chọn hoặc upload video mới sẽ reset preview trước đó; playback URL không được lưu lâu dài.
+- Timeline hiển thị tổng thời lượng, vị trí phát hiện tại, vùng trim và hai handle `start` / `end`.
+- Timeline và video đồng bộ hai chiều; thay đổi `start` sẽ seek video tới mốc mới.
+- Edit state được giữ trên frontend dưới dạng `{ assetId, trim: { start, end } }` và luôn đảm bảo
+  `0 <= start < end <= duration`.
+- Người dùng có thể phát riêng đoạn đã chọn hoặc đặt lại vùng chọn về toàn bộ video.
+- Upload video mới sẽ reset vùng trim về `start = 0` và `end = duration` sau khi metadata load xong.
 
-## Ngoài scope Phase 4
+## Ngoài scope Phase 5
 
-Phase này chưa bao gồm timeline, trimming, FFmpeg, rendering, database, persistence cho asset,
-Redis, queue, worker, authentication, Docker hay hạ tầng deployment.
+Phase này chỉ tạo edit instruction trên frontend. Chưa cắt hoặc render file thật, chưa dùng FFmpeg,
+chưa có render/export API, multi-clip, split, concat, audio track, database hoặc persistence cho edit
+state.
 
 ## Phase tiếp theo
 
-**Phase 5 — Chưa được triển khai**
+**Phase 6 — Chưa được triển khai**
 
-Scope Phase 5 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 6 sẽ được xác định trong yêu cầu riêng.

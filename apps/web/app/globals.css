@@ -21,7 +21,7 @@ main {
 }
 
 .card {
-  width: min(100%, 760px);
+  width: min(100%, 860px);
   padding: 48px;
   border: 1px solid #dce3ee;
   border-radius: 20px;
@@ -100,6 +100,11 @@ h2 {
 h3 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+h4 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .upload-status {
@@ -314,6 +319,204 @@ progress::-moz-progress-bar {
   font-weight: 700;
 }
 
+.trim-editor {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #dce3ee;
+}
+
+.timeline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #344054;
+}
+
+.timeline-heading span {
+  font-family: Consolas, Monaco, monospace;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.trim-timeline {
+  position: relative;
+  height: 52px;
+  margin-top: 16px;
+}
+
+.timeline-track {
+  position: absolute;
+  top: 17px;
+  left: 0;
+  width: 100%;
+  height: 18px;
+  overflow: visible;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #cbd5e1;
+  cursor: crosshair;
+}
+
+.timeline-track:focus-visible,
+.timeline-handle:focus-visible,
+.trim-actions button:focus-visible {
+  outline: 3px solid rgb(37 99 235 / 25%);
+  outline-offset: 3px;
+}
+
+.timeline-selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: #60a5fa;
+}
+
+.timeline-playhead {
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  width: 3px;
+  border-radius: 999px;
+  background: #dc2626;
+  box-shadow: 0 0 0 2px #ffffff;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.timeline-handle {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+  width: 18px;
+  height: 36px;
+  padding: 0;
+  border: 3px solid #ffffff;
+  border-radius: 7px;
+  box-shadow: 0 2px 8px rgb(23 32 51 / 28%);
+  cursor: ew-resize;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+
+.timeline-handle-start {
+  background: #15803d;
+  transform: translateX(-75%);
+}
+
+.timeline-handle-end {
+  background: #c2410c;
+  transform: translateX(-25%);
+}
+
+.timeline-scale {
+  display: flex;
+  justify-content: space-between;
+  color: #667085;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 0.75rem;
+}
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  color: #52607a;
+  font-size: 0.75rem;
+}
+
+.timeline-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #60a5fa;
+}
+
+.legend-start {
+  background: #15803d;
+}
+
+.legend-end {
+  background: #c2410c;
+}
+
+.legend-playhead {
+  width: 3px;
+  border-radius: 999px;
+  background: #dc2626;
+}
+
+.trim-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 0;
+}
+
+.trim-details > div {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.trim-details dt {
+  color: #667085;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.trim-details dd {
+  margin: 6px 0 0;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.trim-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.trim-actions button {
+  flex: 1;
+  padding: 11px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.trim-action-primary {
+  border: 1px solid #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.trim-action-primary:hover {
+  background: #1d4ed8;
+}
+
+.trim-action-secondary {
+  border: 1px solid #9ba9bd;
+  background: #ffffff;
+  color: #344054;
+}
+
+.trim-action-secondary:hover {
+  background: #eef2f8;
+}
+
 button[type='submit'] {
   width: 100%;
   margin-top: 24px;
@@ -354,5 +557,19 @@ button[type='submit']:disabled {
 
   .file-details {
     grid-template-columns: 1fr;
+  }
+
+  .timeline-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .trim-details {
+    grid-template-columns: 1fr;
+  }
+
+  .trim-actions {
+    flex-direction: column;
   }
 }
