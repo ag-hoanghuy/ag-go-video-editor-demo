@@ -1,0 +1,50 @@
+services:
+  - type: web
+    name: ag-go-video-editor-api
+    runtime: docker
+    region: singapore
+    plan: free
+    branch: main
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: "3001"
+      - key: WEB_URL
+        fromService:
+          name: ag-go-video-editor-web
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_PRESIGNED_URL_TTL_SECONDS
+        value: "900"
+
+  - type: web
+    name: ag-go-video-editor-web
+    runtime: docker
+    region: singapore
+    plan: free
+    branch: main
+    dockerfilePath: ./apps/web/Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: ag-go-video-editor-api
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
