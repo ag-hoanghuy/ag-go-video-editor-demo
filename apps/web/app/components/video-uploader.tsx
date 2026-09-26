@@ -1,15 +1,16 @@
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { requestAssetUploadSignature } from '../lib/assets-api';
-import { uploadVideoToCloudinary } from '../lib/video-upload';
+import { useState } from 'react';
+import { requestAssetUploadUrl } from '../lib/assets-api';
+import { uploadVideoToR2 } from '../lib/video-upload';
 import { VideoPreview } from './video-preview';
 
 type UploadPhase = 'empty' | 'ready' | 'preparing' | 'uploading' | 'success' | 'failure';
 
 interface UploadedAsset {
   assetId: string;
+  objectKey: string;
 }
 
 interface UploadState {
@@ -68,18 +69,10 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function VideoUploader() {
-  const uploadControllerRef = useRef<AbortController>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>(initialUploadState);
   const isBusy = uploadState.phase === 'preparing' || uploadState.phase === 'uploading';
   const uploadedAsset = uploadState.uploadedAsset;
-
-  useEffect(
-    () => () => {
-      uploadControllerRef.current?.abort();
-    },
-    [],
-  );
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>): void {
     const file = event.target.files?.[0];
@@ -115,35 +108,27 @@ export function VideoUploader() {
     }
 
     setUploadState({ phase: 'preparing', progress: 0 });
-    const controller = new AbortController();
-    uploadControllerRef.current = controller;
 
     try {
-      const uploadDetails = await requestAssetUploadSignature(selectedFile.name, controller.signal);
+      const uploadDetails = await requestAssetUploadUrl(selectedFile.name);
       setUploadState({ phase: 'uploading', progress: 0 });
-      await uploadVideoToCloudinary(
-        selectedFile,
-        uploadDetails,
-        (progress) => setUploadState((currentState) => ({ ...currentState, progress })),
-        controller.signal,
-      );
+      await uploadVideoToR2(selectedFile, uploadDetails.uploadUrl, (progress) => {
+        setUploadState((currentState) => ({ ...currentState, progress }));
+      });
       setUploadState({
         phase: 'success',
         progress: 100,
-        uploadedAsset: { assetId: uploadDetails.assetId },
+        uploadedAsset: {
+          assetId: uploadDetails.assetId,
+          objectKey: uploadDetails.objectKey,
+        },
       });
     } catch (error) {
-      if (!controller.signal.aborted) {
-        setUploadState((currentState) => ({
-          ...currentState,
-          phase: 'failure',
-          errorMessage: getErrorMessage(error),
-        }));
-      }
-    } finally {
-      if (uploadControllerRef.current === controller) {
-        uploadControllerRef.current = null;
-      }
+      setUploadState((currentState) => ({
+        ...currentState,
+        phase: 'failure',
+        errorMessage: getErrorMessage(error),
+      }));
     }
   }
 

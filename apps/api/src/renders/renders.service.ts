@@ -2,6 +2,7 @@ import type {
   CreateRenderRequest,
   CreateRenderResponse,
   GetRenderPlaybackUrlResponse,
+  VideoContentType,
 } from '@ag-go-video-editor/shared';
 import {
   BadRequestException,
@@ -13,10 +14,12 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createOriginalAssetPublicId } from '../assets/asset-public-id';
+import { createOriginalAssetObjectKey } from '../assets/asset-object-key';
 import { FfmpegService } from '../ffmpeg/ffmpeg.service';
 import { StorageService } from '../storage/storage.service';
-import { createRenderOutputPublicId } from './render-public-id';
+import { createRenderOutputObjectKey } from './render-object-key';
+
+const videoContentType: VideoContentType = 'video/mp4';
 
 @Injectable()
 export class RendersService {
@@ -27,8 +30,8 @@ export class RendersService {
 
   async createRender(request: CreateRenderRequest): Promise<CreateRenderResponse> {
     const renderId = randomUUID();
-    const sourcePublicId = createOriginalAssetPublicId(request.assetId);
-    const outputPublicId = createRenderOutputPublicId(renderId);
+    const sourceKey = createOriginalAssetObjectKey(request.assetId);
+    const outputKey = createRenderOutputObjectKey(renderId);
     let temporaryDirectory: string | undefined;
 
     try {
@@ -36,7 +39,7 @@ export class RendersService {
       const sourcePath = join(temporaryDirectory, 'source.mp4');
       const outputPath = join(temporaryDirectory, 'output.mp4');
 
-      await this.storageService.downloadVideoToFile(sourcePublicId, sourcePath);
+      await this.storageService.downloadObjectToFile(sourceKey, sourcePath);
       const sourceDuration = await this.ffmpegService.probeDuration(sourcePath);
       this.validateTrimDuration(request.trim.end, sourceDuration);
       await this.ffmpegService.trimVideo({
@@ -45,14 +48,16 @@ export class RendersService {
         start: request.trim.start,
         end: request.trim.end,
       });
-      await this.storageService.uploadVideoFile({
+      await this.storageService.uploadFile({
+        contentType: videoContentType,
         filePath: outputPath,
-        publicId: outputPublicId,
+        objectKey: outputKey,
       });
 
       return {
         renderId,
         status: 'completed',
+        outputKey,
       };
     } catch (error) {
       throw this.createSafeException(error);
@@ -64,12 +69,15 @@ export class RendersService {
   }
 
   async getPlaybackUrl(renderId: string): Promise<GetRenderPlaybackUrlResponse> {
-    const outputPublicId = createRenderOutputPublicId(renderId);
+    const outputKey = createRenderOutputObjectKey(renderId);
 
     try {
+      const presignedUrl = await this.storageService.createPresignedGetUrl(outputKey);
+
       return {
         renderId,
-        playbackUrl: this.storageService.createVideoDeliveryUrl(outputPublicId),
+        playbackUrl: presignedUrl.url,
+        expiresIn: presignedUrl.expiresIn,
       };
     } catch {
       throw new InternalServerErrorException({

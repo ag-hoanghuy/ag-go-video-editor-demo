@@ -4,24 +4,22 @@ export interface HealthResponse {
 
 export type VideoContentType = 'video/mp4';
 
-export interface CreateAssetUploadSignatureRequest {
+export interface CreateAssetUploadUrlRequest {
   filename: string;
   contentType: VideoContentType;
 }
 
-export interface CreateAssetUploadSignatureResponse {
+export interface CreateAssetUploadUrlResponse {
   assetId: string;
-  publicId: string;
-  cloudName: string;
-  apiKey: string;
-  timestamp: number;
-  signature: string;
+  objectKey: string;
   uploadUrl: string;
+  expiresIn: number;
 }
 
 export interface GetAssetPlaybackUrlResponse {
   assetId: string;
   playbackUrl: string;
+  expiresIn: number;
 }
 
 export interface VideoTrimInstruction {
@@ -37,9 +35,11 @@ export interface CreateRenderRequest {
 export interface CreateRenderResponse {
   renderId: string;
   status: 'completed';
+  outputKey: string;
 }
 
 export interface GetRenderPlaybackUrlResponse {
   renderId: string;
   playbackUrl: string;
+  expiresIn: number;
 }

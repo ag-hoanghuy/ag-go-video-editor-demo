@@ -6,12 +6,20 @@ import type {
 import { getApiErrorMessage, isRecord, requestApi } from './api-client';
 
 function isCreateRenderResponse(value: unknown): value is CreateRenderResponse {
-  return isRecord(value) && typeof value.renderId === 'string' && value.status === 'completed';
+  return (
+    isRecord(value) &&
+    typeof value.renderId === 'string' &&
+    value.status === 'completed' &&
+    typeof value.outputKey === 'string'
+  );
 }
 
 function isRenderPlaybackUrlResponse(value: unknown): value is GetRenderPlaybackUrlResponse {
   return (
-    isRecord(value) && typeof value.renderId === 'string' && typeof value.playbackUrl === 'string'
+    isRecord(value) &&
+    typeof value.renderId === 'string' &&
+    typeof value.playbackUrl === 'string' &&
+    typeof value.expiresIn === 'number'
   );
 }
 

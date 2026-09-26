@@ -1,6 +1,6 @@
 import type {
-  CreateAssetUploadSignatureRequest,
-  CreateAssetUploadSignatureResponse,
+  CreateAssetUploadUrlRequest,
+  CreateAssetUploadUrlResponse,
   GetAssetPlaybackUrlResponse,
   VideoContentType,
 } from '@ag-go-video-editor/shared';
@@ -8,40 +8,38 @@ import { getApiErrorMessage, isRecord, requestApi } from './api-client';
 
 const videoContentType: VideoContentType = 'video/mp4';
 
-function isUploadSignatureResponse(value: unknown): value is CreateAssetUploadSignatureResponse {
+function isUploadUrlResponse(value: unknown): value is CreateAssetUploadUrlResponse {
   return (
     isRecord(value) &&
     typeof value.assetId === 'string' &&
-    typeof value.publicId === 'string' &&
-    typeof value.cloudName === 'string' &&
-    typeof value.apiKey === 'string' &&
-    typeof value.timestamp === 'number' &&
-    typeof value.signature === 'string' &&
-    typeof value.uploadUrl === 'string'
+    typeof value.objectKey === 'string' &&
+    typeof value.uploadUrl === 'string' &&
+    typeof value.expiresIn === 'number'
   );
 }
 
 function isPlaybackUrlResponse(value: unknown): value is GetAssetPlaybackUrlResponse {
   return (
-    isRecord(value) && typeof value.assetId === 'string' && typeof value.playbackUrl === 'string'
+    isRecord(value) &&
+    typeof value.assetId === 'string' &&
+    typeof value.playbackUrl === 'string' &&
+    typeof value.expiresIn === 'number'
   );
 }
 
-export async function requestAssetUploadSignature(
+export async function requestAssetUploadUrl(
   filename: string,
-  signal: AbortSignal,
-): Promise<CreateAssetUploadSignatureResponse> {
-  const requestBody: CreateAssetUploadSignatureRequest = {
+): Promise<CreateAssetUploadUrlResponse> {
+  const requestBody: CreateAssetUploadUrlRequest = {
     filename,
     contentType: videoContentType,
   };
   const response = await requestApi(
-    '/api/assets/upload-signature',
+    '/api/assets/upload-url',
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
-      signal,
     },
     'Không thể kết nối để chuẩn bị tải video nguồn.',
   );
@@ -51,7 +49,7 @@ export async function requestAssetUploadSignature(
     throw new Error(apiMessage ?? 'Không thể chuẩn bị tải video nguồn. Vui lòng thử lại.');
   }
 
-  if (!isUploadSignatureResponse(response.body)) {
+  if (!isUploadUrlResponse(response.body)) {
     throw new Error('Không thể chuẩn bị tải video nguồn.');
   }
 

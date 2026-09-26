@@ -1,22 +1,19 @@
 import type {
-  CreateAssetUploadSignatureResponse,
+  CreateAssetUploadUrlResponse,
   GetAssetPlaybackUrlResponse,
 } from '@ag-go-video-editor/shared';
 import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { AssetIdParamDto } from './dto/asset-id-param.dto';
-import { CreateAssetUploadSignatureDto } from './dto/create-asset-upload-signature.dto';
+import { CreateAssetUploadUrlDto } from './dto/create-asset-upload-url.dto';
 
 @Controller('api/assets')
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
-  @Post('upload-signature')
-  createUploadSignature(
-    @Body() request: CreateAssetUploadSignatureDto,
-  ): CreateAssetUploadSignatureResponse {
-    void request;
-    return this.assetsService.createUploadSignature();
+  @Post('upload-url')
+  createUploadUrl(@Body() request: CreateAssetUploadUrlDto): Promise<CreateAssetUploadUrlResponse> {
+    return this.assetsService.createUploadUrl(request.contentType);
   }
 
   @Get(':assetId/playback-url')
