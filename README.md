@@ -1,9 +1,10 @@
 # AG Go Video Editor Demo
 
 Nền tảng monorepo TypeScript cho bản demo trình chỉnh sửa video trực tuyến. Người dùng có thể upload,
-preview, chọn vùng trim, export bằng FFmpeg và xem hoặc tải output trực tiếp từ Cloudflare R2.
+preview, chọn vùng trim, export bằng FFmpeg và xem hoặc tải output trực tiếp từ Cloudflare R2. Hai
+ứng dụng có production image riêng và có thể chạy cùng nhau bằng Docker Compose.
 
-**Phase hiện tại: Phase 7 — Export Video End-to-End**
+**Phase hiện tại: Phase 8 — Docker & Production Deployment**
 
 ## Tech stack
 
@@ -13,6 +14,7 @@ preview, chọn vùng trim, export bằng FFmpeg và xem hoặc tải output tr�
 - Next.js với App Router
 - NestJS
 - Cloudflare R2 qua AWS SDK S3-compatible
+- Docker và Docker Compose
 - ESLint và Prettier
 
 ## Cấu trúc repository
@@ -21,14 +23,18 @@ preview, chọn vùng trim, export bằng FFmpeg và xem hoặc tải output tr�
 ag-go-video-editor-demo/
 ├── apps/
 │   ├── api/                 # Backend NestJS
+│   │   └── Dockerfile       # Production image API + FFmpeg
 │   └── web/                 # Frontend Next.js
+│       └── Dockerfile       # Production image Next.js standalone
 ├── packages/
 │   └── shared/              # Kiểu dữ liệu và contract dùng chung
+├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── .prettierignore
 ├── .prettierrc
 ├── eslint.config.mjs
+├── docker-compose.yml
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
@@ -36,6 +42,15 @@ ag-go-video-editor-demo/
 ```
 
 ## Yêu cầu môi trường
+
+### Chạy bằng Docker
+
+- Docker Engine hoặc Docker Desktop
+- Docker Compose v2 (`docker compose`)
+
+Không cần cài Node.js, pnpm, FFmpeg hoặc ffprobe trực tiếp trên host khi dùng Docker.
+
+### Chạy trực tiếp trên host
 
 - Node.js 22 trở lên
 - pnpm 12 trở lên
@@ -50,25 +65,37 @@ ffprobe -version
 
 FFmpeg build phải hỗ trợ encoder H.264 `libx264` và AAC.
 
-## Cài đặt
-
-```bash
-pnpm install
-```
+## Cấu hình environment
 
 Sao chép `.env.example` thành `.env`, sau đó thay các giá trị mẫu R2 bằng thông tin từ Cloudflare.
 Không commit file `.env` hoặc credential thật.
 
-Các biến R2 bắt buộc:
+| Biến                           | Phạm vi            | Mô tả                                                        |
+| ------------------------------ | ------------------ | ------------------------------------------------------------ |
+| `NEXT_PUBLIC_API_URL`          | Web build          | URL API công khai mà browser truy cập                        |
+| `WEB_PORT`                     | Docker Compose     | Port host publish cho web, mặc định `3000`                   |
+| `PORT`                         | API chạy trực tiếp | Port API khi chạy ngoài Docker, mặc định `3001`              |
+| `API_PORT`                     | Docker Compose     | Port host publish cho API, mặc định `3001`                   |
+| `WEB_URL`                      | API runtime        | Origin frontend chính xác được API cho phép qua CORS         |
+| `R2_ACCOUNT_ID`                | API runtime        | Cloudflare account ID gồm 32 ký tự hex                       |
+| `R2_ACCESS_KEY_ID`             | API runtime        | Access Key ID của R2 API token                               |
+| `R2_SECRET_ACCESS_KEY`         | API runtime        | Secret Access Key của R2 API token                           |
+| `R2_BUCKET`                    | API runtime        | Tên bucket lưu object                                        |
+| `R2_ENDPOINT`                  | API runtime        | S3 API endpoint của account                                  |
+| `R2_PRESIGNED_URL_TTL_SECONDS` | API runtime        | Thời gian hiệu lực URL, từ 1 đến 604800 giây, mặc định `900` |
 
-| Biến                           | Mô tả                                    |
-| ------------------------------ | ---------------------------------------- |
-| `R2_ACCOUNT_ID`                | Cloudflare account ID gồm 32 ký tự hex   |
-| `R2_ACCESS_KEY_ID`             | Access Key ID của R2 API token           |
-| `R2_SECRET_ACCESS_KEY`         | Secret Access Key của R2 API token       |
-| `R2_BUCKET`                    | Tên bucket lưu object                    |
-| `R2_ENDPOINT`                  | S3 API endpoint của account              |
-| `R2_PRESIGNED_URL_TTL_SECONDS` | Thời gian hiệu lực, từ 1 đến 604800 giây |
+`NEXT_PUBLIC_API_URL` được nhúng vào JavaScript client trong lúc `next build`. Giá trị này phải là URL
+công khai nhìn thấy từ browser, ví dụ `https://api.example.com`; không dùng hostname nội bộ Docker
+`http://api:3001`. Khi đổi biến này phải build lại web image.
+
+Trong production, `WEB_URL` phải là origin chính xác của frontend, ví dụ
+`https://editor.example.com`, để API trả CORS header phù hợp.
+
+## Cài đặt local
+
+```bash
+pnpm install
+```
 
 ## Chạy local
 
@@ -147,6 +174,83 @@ upload source
 → preview/download output
 ```
 
+## Chạy production bằng Docker Compose
+
+Điền `.env` bằng credential R2 thật và URL public phù hợp, sau đó build hai image:
+
+```bash
+docker compose build
+```
+
+Khởi động production containers:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+Compose publish web ở `WEB_PORT` và API ở `API_PORT`. Với cấu hình mặc định:
+
+- Web: http://localhost:3000
+- API health: http://localhost:3001/health
+
+Service `web` chỉ khởi động sau khi healthcheck `GET /health` của `api` thành công. Kiểm tra nhanh:
+
+```bash
+curl http://localhost:3001/health
+curl http://localhost:3000
+```
+
+Theo dõi log và dừng stack:
+
+```bash
+docker compose logs -f web api
+docker compose down
+```
+
+Web image chạy Next.js standalone production server. API image chạy `node dist/main.js`, cài FFmpeg
+ở runtime và không dùng watch mode. Source/build dependencies không được copy vào runtime stages.
+
+Thư mục tạm của render nằm tại `/tmp/video-editor` bên trong API container, không bind mount ra host.
+Logic `finally` hiện tại tiếp tục cleanup file và thư mục tạm sau mỗi request.
+
+### Build image riêng
+
+```bash
+docker build \
+  --file apps/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.example.com \
+  --tag ag-go-video-editor-demo-web .
+
+docker build \
+  --file apps/api/Dockerfile \
+  --tag ag-go-video-editor-demo-api .
+```
+
+### Kiểm tra FFmpeg trong API container
+
+```bash
+docker compose exec api ffmpeg -version
+docker compose exec api ffprobe -version
+docker compose exec api sh -lc "ffmpeg -hide_banner -encoders 2>/dev/null | grep -E 'libx264|aac'"
+```
+
+Kết quả encoder phải có `libx264` và `aac`.
+
+### Smoke test sau deploy
+
+1. Chạy `docker compose build` và `docker compose up -d`.
+2. Xác nhận `GET /health` trả `{ "status": "ok" }`.
+3. Mở frontend bằng URL public đã cấu hình.
+4. Chọn một file MP4 thật và upload source trực tiếp lên R2.
+5. Xác nhận preview source có thể play, pause và seek.
+6. Chọn vùng trim rồi bấm Export.
+7. Xác nhận API dùng FFmpeg render và upload output lên R2.
+8. Phát thử output và tải file bằng nút `Tải video`.
+
+Smoke test này cần bucket thật và R2 CORS đã cho phép frontend origin. Không dùng
+`http://api:3001` ở bất kỳ cấu hình browser-facing nào.
+
 ### CORS cho Cloudflare R2
 
 Bucket R2 phải cho phép origin của frontend thực hiện `PUT` để upload và `GET` để phát video trực
@@ -168,6 +272,20 @@ Khi deploy, thay origin local bằng origin chính xác của frontend. Presigne
 chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
 [Configure CORS](https://developers.cloudflare.com/r2/buckets/cors/) của Cloudflare R2.
 
+Ví dụ production:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://editor.example.com"],
+    "AllowedMethods": ["GET", "PUT"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
 ## Các scripts
 
 | Script              | Chức năng                                      |
@@ -182,9 +300,8 @@ chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
 ## Chức năng hiện tại
 
 - Trang chủ Next.js hiển thị tên và mô tả dự án.
-- Frontend gọi `GET /health` và hiển thị trạng thái API bằng tiếng Việt.
 - Backend NestJS trả về `{ "status": "ok" }` từ `GET /health`.
-- Package `@ag-go-video-editor/shared` cung cấp contract `HealthResponse` cho cả hai ứng dụng.
+- Package `@ag-go-video-editor/shared` cung cấp contract dùng chung cho frontend và backend.
 - CORS cho phép frontend local truy cập backend.
 - Backend validate cấu hình R2 ngay khi khởi động.
 - `POST /api/assets/upload-url` chỉ chấp nhận file `.mp4` với MIME `video/mp4`.
@@ -217,14 +334,22 @@ chặn nếu bucket chưa có CORS phù hợp. Xem hướng dẫn
 - Khi trim thay đổi, output cũ được đánh dấu không còn đại diện cho vùng chọn hiện tại và yêu cầu export
   lại; upload source mới sẽ reset toàn bộ export state.
 - Frontend phân biệt lỗi render, lỗi lấy playback URL và lỗi phát video output.
+- Web và API có multi-stage production Dockerfile riêng; web chạy Next.js standalone, API chạy NestJS
+  build với production dependencies.
+- API image cung cấp `ffmpeg`, `ffprobe`, encoder `libx264` và AAC.
+- Docker Compose truyền R2 credential ở runtime, publish đúng hai port và dùng healthcheck API để điều
+  phối thứ tự khởi động.
+- `NEXT_PUBLIC_API_URL` được truyền vào web build dưới dạng URL public; `WEB_URL` cấu hình CORS API ở
+  runtime.
 
-## Ngoài scope Phase 7
+## Ngoài scope Phase 8
 
 Phase này chưa có queue, worker, render progress realtime, database, render history, danh sách export,
-background retry, multi-clip, concat, transition, text overlay hoặc audio editing.
+background retry, authentication, multi-clip, concat, transition, text overlay hoặc audio editing.
+Không có cấu hình dành riêng cho một cloud/container provider cụ thể.
 
 ## Phase tiếp theo
 
-**Phase 8 — Chưa được triển khai**
+**Phase 9 — Chưa được triển khai**
 
-Scope Phase 8 sẽ được xác định trong yêu cầu riêng.
+Scope Phase 9 sẽ được xác định trong yêu cầu riêng.

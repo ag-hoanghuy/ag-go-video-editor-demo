@@ -2,6 +2,9 @@
   "name": "@ag-go-video-editor/api",
   "version": "0.1.0",
   "private": true,
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
