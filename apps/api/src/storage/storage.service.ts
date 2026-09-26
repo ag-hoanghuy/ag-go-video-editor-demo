@@ -1,103 +1,78 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { v2 as cloudinary } from 'cloudinary';
 import { Inject, Injectable } from '@nestjs/common';
-import { createReadStream, createWriteStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
 import { Readable } from 'node:stream';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
-import { R2_CONFIG, type R2Config } from './r2.config';
+import { CLOUDINARY_CONFIG, type CloudinaryConfig } from './cloudinary.config';
 
-interface CreatePresignedPutUrlOptions {
-  contentType: string;
-  objectKey: string;
-}
-
-interface UploadFileOptions {
-  contentType: string;
+interface UploadVideoFileOptions {
   filePath: string;
-  objectKey: string;
+  publicId: string;
 }
 
-export interface PresignedUrlResult {
-  url: string;
-  expiresIn: number;
+export interface SignedVideoUpload {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  uploadUrl: string;
 }
 
 @Injectable()
 export class StorageService {
-  private readonly client: S3Client;
-
-  constructor(@Inject(R2_CONFIG) private readonly config: R2Config) {
-    this.client = new S3Client({
-      region: 'auto',
-      endpoint: config.endpoint,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
+  constructor(@Inject(CLOUDINARY_CONFIG) private readonly config: CloudinaryConfig) {
+    cloudinary.config({
+      cloud_name: config.cloudName,
+      api_key: config.apiKey,
+      api_secret: config.apiSecret,
+      secure: true,
     });
   }
 
-  async createPresignedPutUrl(options: CreatePresignedPutUrlOptions): Promise<PresignedUrlResult> {
-    const command = new PutObjectCommand({
-      Bucket: this.config.bucket,
-      Key: options.objectKey,
-      ContentType: options.contentType,
-    });
-
-    return this.sign(command, new Set(['content-type']));
-  }
-
-  async createPresignedGetUrl(objectKey: string): Promise<PresignedUrlResult> {
-    const command = new GetObjectCommand({
-      Bucket: this.config.bucket,
-      Key: objectKey,
-    });
-
-    return this.sign(command);
-  }
-
-  async downloadObjectToFile(objectKey: string, filePath: string): Promise<void> {
-    const response = await this.client.send(
-      new GetObjectCommand({
-        Bucket: this.config.bucket,
-        Key: objectKey,
-      }),
+  createSignedVideoUpload(publicId: string): SignedVideoUpload {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = cloudinary.utils.api_sign_request(
+      { public_id: publicId, timestamp },
+      this.config.apiSecret,
     );
 
-    if (!response.Body || !(response.Body instanceof Readable)) {
-      throw new Error('R2 không trả về stream cho video nguồn.');
-    }
-
-    await pipeline(response.Body, createWriteStream(filePath, { flags: 'wx' }));
+    return {
+      cloudName: this.config.cloudName,
+      apiKey: this.config.apiKey,
+      timestamp,
+      signature,
+      uploadUrl: `https://api.cloudinary.com/v1_1/${this.config.cloudName}/video/upload`,
+    };
   }
 
-  async uploadFile(options: UploadFileOptions): Promise<void> {
-    const fileStats = await stat(options.filePath);
-    const body = createReadStream(options.filePath);
-
-    try {
-      await this.client.send(
-        new PutObjectCommand({
-          Bucket: this.config.bucket,
-          Key: options.objectKey,
-          Body: body,
-          ContentLength: fileStats.size,
-          ContentType: options.contentType,
-        }),
-      );
-    } finally {
-      body.destroy();
-    }
+  createVideoDeliveryUrl(publicId: string): string {
+    return cloudinary.url(publicId, {
+      resource_type: 'video',
+      secure: true,
+      format: 'mp4',
+    });
   }
 
-  private async sign(
-    command: GetObjectCommand | PutObjectCommand,
-    signableHeaders?: Set<string>,
-  ): Promise<PresignedUrlResult> {
-    const expiresIn = this.config.presignedUrlTtlSeconds;
-    const url = await getSignedUrl(this.client, command, { expiresIn, signableHeaders });
+  async downloadVideoToFile(publicId: string, filePath: string): Promise<void> {
+    const response = await fetch(this.createVideoDeliveryUrl(publicId));
 
-    return { url, expiresIn };
+    if (!response.ok || !response.body) {
+      throw new Error('Không thể tải video nguồn từ Cloudinary.');
+    }
+
+    await pipeline(
+      Readable.fromWeb(response.body as unknown as NodeReadableStream<Uint8Array>),
+      createWriteStream(filePath, { flags: 'wx' }),
+    );
+  }
+
+  async uploadVideoFile(options: UploadVideoFileOptions): Promise<void> {
+    await cloudinary.uploader.upload(options.filePath, {
+      public_id: options.publicId,
+      resource_type: 'video',
+      overwrite: true,
+      format: 'mp4',
+    });
   }
 }

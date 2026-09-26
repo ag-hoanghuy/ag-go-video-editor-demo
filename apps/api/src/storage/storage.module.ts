@@ -1,14 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { loadR2Config, R2_CONFIG } from './r2.config';
+import { CLOUDINARY_CONFIG, loadCloudinaryConfig } from './cloudinary.config';
 import { StorageService } from './storage.service';
 
 @Module({
   providers: [
     {
-      provide: R2_CONFIG,
+      provide: CLOUDINARY_CONFIG,
       inject: [ConfigService],
-      useFactory: loadR2Config,
+      useFactory: loadCloudinaryConfig,
     },
     StorageService,
   ],

@@ -1,7 +1,10 @@
-import type { CreateAssetUploadUrlRequest, VideoContentType } from '@ag-go-video-editor/shared';
+import type {
+  CreateAssetUploadSignatureRequest,
+  VideoContentType,
+} from '@ag-go-video-editor/shared';
 import { Equals, IsString, Matches, MaxLength } from 'class-validator';
 
-export class CreateAssetUploadUrlDto implements CreateAssetUploadUrlRequest {
+export class CreateAssetUploadSignatureDto implements CreateAssetUploadSignatureRequest {
   @IsString({ message: 'filename phải là chuỗi.' })
   @MaxLength(255, { message: 'filename không được vượt quá 255 ký tự.' })
   @Matches(/^[^/\\]+\.mp4$/i, { message: 'filename phải là tên file .mp4 hợp lệ.' })
