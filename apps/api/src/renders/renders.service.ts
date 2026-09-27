@@ -12,7 +12,7 @@ import {
   type HttpException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createOriginalAssetObjectKey } from '../assets/asset-object-key';
@@ -42,7 +42,15 @@ export class RendersService {
         `Render ${renderId}: create temp directory for asset ${request.assetId}`,
       );
 
-      temporaryDirectory = await mkdtemp(join(tmpdir(), 'ag-go-video-render-'));
+      const temporaryRoot = tmpdir();
+
+      await mkdir(temporaryRoot, {
+        recursive: true,
+      });
+
+      temporaryDirectory = await mkdtemp(
+        join(temporaryRoot, 'ag-go-video-render-'),
+      );
 
       const sourcePath = join(temporaryDirectory, 'source.mp4');
       const outputPath = join(temporaryDirectory, 'output.mp4');
@@ -99,7 +107,8 @@ export class RendersService {
     const outputKey = createRenderOutputObjectKey(renderId);
 
     try {
-      const presignedUrl = await this.storageService.createPresignedGetUrl(outputKey);
+      const presignedUrl =
+        await this.storageService.createPresignedGetUrl(outputKey);
 
       return {
         renderId,
@@ -142,9 +151,14 @@ export class RendersService {
     });
   }
 
-  private async removeTemporaryDirectory(temporaryDirectory: string): Promise<void> {
+  private async removeTemporaryDirectory(
+    temporaryDirectory: string,
+  ): Promise<void> {
     try {
-      await rm(temporaryDirectory, { recursive: true, force: true });
+      await rm(temporaryDirectory, {
+        recursive: true,
+        force: true,
+      });
     } catch (error) {
       this.logger.error(
         `Không thể xóa thư mục render tạm: ${temporaryDirectory}`,
