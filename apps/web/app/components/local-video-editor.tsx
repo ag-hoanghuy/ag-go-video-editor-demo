@@ -14,7 +14,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, RefObject } from 'react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { EditorDragOverlay } from './editor-drag-overlay';
 import { EditorTimeline } from './editor-timeline';
@@ -24,6 +24,7 @@ import {
   useLocalVideoPreview,
   type LocalVideoPreviewTarget,
   type PreviewControlMode,
+  type PreviewPlayerIndex,
 } from '../hooks/use-local-video-preview';
 import { readEditorDragData, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
 import {
@@ -109,7 +110,12 @@ interface ManagedMediaResource {
 }
 
 interface PreviewWorkspaceProps {
+  activePlayerIndex: PreviewPlayerIndex;
+  firstPlayerRef: RefObject<HTMLVideoElement | null>;
+  isPlaying: boolean;
   media: LocalMediaItem | null;
+  playbackError: string | null;
+  secondPlayerRef: RefObject<HTMLVideoElement | null>;
   target: LocalVideoPreviewTarget | null;
 }
 
@@ -471,9 +477,18 @@ function ToolRail() {
   );
 }
 
-function PreviewWorkspace({ media, target }: PreviewWorkspaceProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  useLocalVideoPreview(videoRef, target);
+function PreviewWorkspace({
+  activePlayerIndex,
+  firstPlayerRef,
+  isPlaying,
+  media,
+  playbackError,
+  secondPlayerRef,
+  target,
+}: PreviewWorkspaceProps) {
+  const showLibraryControls = Boolean(media && !isPlaying && target?.mode === 'library');
+  const firstPlayerIsActive = Boolean(media && activePlayerIndex === 0);
+  const secondPlayerIsActive = Boolean(media && activePlayerIndex === 1);
 
   return (
     <section className="preview-workspace" aria-label="Khu vực xem trước">
@@ -486,11 +501,31 @@ function PreviewWorkspace({ media, target }: PreviewWorkspaceProps) {
       </div>
 
       <div className="preview-stage">
-        {media ? (
-          <video ref={videoRef} className="local-video-player" preload="metadata" controls>
-            Trình duyệt của bạn không hỗ trợ phát video.
-          </video>
-        ) : (
+        <video
+          ref={firstPlayerRef}
+          className={`local-video-player ${
+            firstPlayerIsActive ? 'local-video-player-active' : 'local-video-player-standby'
+          }`}
+          preload="auto"
+          controls={showLibraryControls && firstPlayerIsActive}
+          playsInline
+          aria-hidden={!firstPlayerIsActive}
+        >
+          Trình duyệt của bạn không hỗ trợ phát video.
+        </video>
+        <video
+          ref={secondPlayerRef}
+          className={`local-video-player ${
+            secondPlayerIsActive ? 'local-video-player-active' : 'local-video-player-standby'
+          }`}
+          preload="auto"
+          controls={showLibraryControls && secondPlayerIsActive}
+          playsInline
+          aria-hidden={!secondPlayerIsActive}
+        >
+          Trình duyệt của bạn không hỗ trợ phát video.
+        </video>
+        {!media ? (
           <div className="preview-empty">
             <span className="preview-empty-icon" aria-hidden="true">
               ▶
@@ -498,16 +533,19 @@ function PreviewWorkspace({ media, target }: PreviewWorkspaceProps) {
             <strong>Chọn video để xem trước</strong>
             <p>Video được phát trực tiếp từ file cục bộ trong trình duyệt.</p>
           </div>
-        )}
+        ) : null}
       </div>
 
       <div className="preview-footer">
-        <span>
-          {media
-            ? target?.mode === 'timeline'
-              ? 'Đang xem theo vị trí dòng thời gian'
-              : 'Đang xem video cục bộ'
-            : 'Không có phương tiện đang chọn'}
+        <span className={playbackError ? 'preview-status-error' : undefined}>
+          {playbackError ??
+            (media
+              ? isPlaying
+                ? 'Đang phát dòng thời gian'
+                : target?.mode === 'timeline'
+                  ? 'Đang xem theo vị trí dòng thời gian'
+                  : 'Đang xem video cục bộ'
+              : 'Không có phương tiện đang chọn')}
         </span>
         <span>16:9</span>
       </div>
@@ -524,10 +562,18 @@ export function LocalVideoEditor() {
   const [activeDragData, setActiveDragData] = useState<EditorDragData | null>(null);
   const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
   const [currentTimelineTime, setCurrentTimelineTime] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [previewControlMode, setPreviewControlMode] = useState<PreviewControlMode>('library');
   const [previewRequestVersion, setPreviewRequestVersion] = useState(0);
   const filmstripFrameManager = useFilmstripFrameManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const firstPreviewPlayerRef = useRef<HTMLVideoElement>(null);
+  const secondPreviewPlayerRef = useRef<HTMLVideoElement>(null);
+  const previewPlayerRefs = useMemo(
+    () => [firstPreviewPlayerRef, secondPreviewPlayerRef] as const,
+    [],
+  );
   const dndClickReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didDndDragRef = useRef(false);
   const initialPointerClientXRef = useRef<number | null>(null);
@@ -701,6 +747,8 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     filmstripFrameManager.removeMedia(id);
     const resource = resourcesRef.current.get(id);
 
@@ -740,6 +788,9 @@ export function LocalVideoEditor() {
 
   const handleDragStart = (event: DragStartEvent) => {
     const dragData = readEditorDragData(event.active.data.current);
+
+    pauseTimelinePlayback();
+    setPlaybackError(null);
 
     if (dndClickReleaseTimerRef.current !== null) {
       clearTimeout(dndClickReleaseTimerRef.current);
@@ -864,12 +915,42 @@ export function LocalVideoEditor() {
       sourceTime: previewControlMode === 'timeline' ? (timelinePosition?.sourceTime ?? null) : null,
     };
   }, [previewControlMode, previewMedia, previewRequestVersion, timelinePosition?.sourceTime]);
+  const { activePlayerIndex, pauseTimelinePlayback, playTimeline } = useLocalVideoPreview(
+    previewPlayerRefs,
+    {
+      clips: timelineClips,
+      currentTimelineTime: safeTimelineTime,
+      isPlaying,
+      mediaItems: editorState.mediaItems,
+      target: previewTarget,
+      onIsPlayingChange: setIsPlaying,
+      onPlaybackError: setPlaybackError,
+      onTimelineTimeChange: setCurrentTimelineTime,
+    },
+  );
+
+  const handleToggleTimelinePlayback = () => {
+    if (isPlaying) {
+      pauseTimelinePlayback();
+      return;
+    }
+
+    if (timelineClips.length === 0 || isTrimTransactionActive) {
+      return;
+    }
+
+    setPlaybackError(null);
+    setPreviewControlMode('timeline');
+    void playTimeline();
+  };
 
   const handleLibrarySelect = (id: string) => {
     if (didDndDragRef.current) {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     dispatch({ type: 'select-media', id });
     setPreviewControlMode('library');
   };
@@ -879,6 +960,8 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     setCurrentTimelineTime(clampTimelineTime(time, timelineDuration));
     setPreviewControlMode('timeline');
     setPreviewRequestVersion((version) => version + 1);
@@ -891,6 +974,8 @@ export function LocalVideoEditor() {
   };
 
   const handleTimelineTrimStart = (clip: TimelineClip) => {
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     dispatch({ type: 'begin-timeline-trim', clipId: clip.id });
     setPreviewControlMode('timeline');
   };
@@ -941,6 +1026,8 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     dispatch({
       type: 'split-timeline-clip',
       clipId: selectedTimelineClip.id,
@@ -957,6 +1044,8 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     const nextTimelineClips = deleteTimelineClip(timelineClips, selectedTimelineClip.id);
 
     dispatch({ type: 'delete-timeline-clip', clipId: selectedTimelineClip.id });
@@ -974,13 +1063,15 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     dispatch({ type: 'undo-timeline-edit' });
     setCurrentTimelineTime((time) =>
       clampTimelineTime(time, getTimelineDuration(previousSnapshot.clips)),
     );
     setPreviewControlMode('timeline');
     setPreviewRequestVersion((version) => version + 1);
-  }, [timelineHistory]);
+  }, [pauseTimelinePlayback, timelineHistory]);
 
   const handleRedoTimeline = useCallback(() => {
     const nextSnapshot = timelineHistory.future[0];
@@ -989,13 +1080,15 @@ export function LocalVideoEditor() {
       return;
     }
 
+    pauseTimelinePlayback();
+    setPlaybackError(null);
     dispatch({ type: 'redo-timeline-edit' });
     setCurrentTimelineTime((time) =>
       clampTimelineTime(time, getTimelineDuration(nextSnapshot.clips)),
     );
     setPreviewControlMode('timeline');
     setPreviewRequestVersion((version) => version + 1);
-  }, [timelineHistory]);
+  }, [pauseTimelinePlayback, timelineHistory]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1046,7 +1139,15 @@ export function LocalVideoEditor() {
               onSelect={handleLibrarySelect}
               onRemove={handleRemove}
             />
-            <PreviewWorkspace media={previewMedia} target={previewTarget} />
+            <PreviewWorkspace
+              activePlayerIndex={activePlayerIndex}
+              firstPlayerRef={firstPreviewPlayerRef}
+              isPlaying={isPlaying}
+              media={previewMedia}
+              playbackError={playbackError}
+              secondPlayerRef={secondPreviewPlayerRef}
+              target={previewTarget}
+            />
           </div>
           <EditorTimeline
             clips={timelineClips}
@@ -1055,10 +1156,12 @@ export function LocalVideoEditor() {
             mediaDropIndex={mediaDropIndex}
             filmstripManager={filmstripFrameManager}
             currentTimelineTime={safeTimelineTime}
+            canPlay={timelineClips.length > 0 && !isTrimTransactionActive}
             canDeleteSelectedClip={selectedTimelineClip !== null && !isTrimTransactionActive}
             canRedo={canRedoTimeline}
             canSplitSelectedClip={selectedSplitSourceTime !== null && !isTrimTransactionActive}
             canUndo={canUndoTimeline}
+            isPlaying={isPlaying}
             onDeleteSelectedClip={handleDeleteSelectedClip}
             onRedo={handleRedoTimeline}
             onSeek={handleTimelineSeek}
@@ -1068,6 +1171,7 @@ export function LocalVideoEditor() {
             onTrimCommit={handleTimelineTrimCommit}
             onTrimClip={handleTimelineClipTrim}
             onTrimStart={handleTimelineTrimStart}
+            onTogglePlayback={handleToggleTimelinePlayback}
             onUndo={handleUndoTimeline}
           />
         </div>

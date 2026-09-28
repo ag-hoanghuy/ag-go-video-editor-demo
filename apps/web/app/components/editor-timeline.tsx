@@ -28,10 +28,12 @@ interface EditorTimelineProps {
   mediaDropIndex: number | null;
   filmstripManager: FilmstripFrameManager;
   currentTimelineTime: number;
+  canPlay: boolean;
   canDeleteSelectedClip: boolean;
   canRedo: boolean;
   canSplitSelectedClip: boolean;
   canUndo: boolean;
+  isPlaying: boolean;
   onDeleteSelectedClip: () => void;
   onRedo: () => void;
   onSeek: (time: number) => void;
@@ -46,6 +48,7 @@ interface EditorTimelineProps {
     mediaDuration: number,
   ) => void;
   onTrimStart: (clip: TimelineClip) => void;
+  onTogglePlayback: () => void;
   onUndo: () => void;
 }
 
@@ -168,10 +171,12 @@ export function EditorTimeline({
   mediaDropIndex,
   filmstripManager,
   currentTimelineTime,
+  canPlay,
   canDeleteSelectedClip,
   canRedo,
   canSplitSelectedClip,
   canUndo,
+  isPlaying,
   onDeleteSelectedClip,
   onRedo,
   onSeek,
@@ -181,6 +186,7 @@ export function EditorTimeline({
   onTrimCommit,
   onTrimClip,
   onTrimStart,
+  onTogglePlayback,
   onUndo,
 }: EditorTimelineProps) {
   const { isOver, setNodeRef } = useDroppable({ id: timelineTrackDndId });
@@ -228,6 +234,16 @@ export function EditorTimeline({
       <div className="timeline-toolbar-shell">
         <strong>Dòng thời gian</strong>
         <div className="timeline-actions-shell">
+          <button
+            className={isPlaying ? 'timeline-playback-button-active' : undefined}
+            type="button"
+            disabled={!canPlay}
+            aria-pressed={isPlaying}
+            onClick={onTogglePlayback}
+          >
+            <span aria-hidden="true">{isPlaying ? '❚❚' : '▶'}</span>
+            {isPlaying ? 'Tạm dừng' : 'Phát'}
+          </button>
           <button
             type="button"
             disabled={!canUndo}
