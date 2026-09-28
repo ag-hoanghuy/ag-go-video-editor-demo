@@ -1,16 +1,20 @@
 import { useDroppable } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { TimelineFilmstrip } from './timeline-filmstrip';
+import { TimelinePlayhead } from './timeline-playhead';
 import { getTimelineClipDndId, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
 import type { FilmstripFrameManager } from '../lib/filmstrip-frame-manager';
 import { formatMediaDuration, type LocalMediaItem } from '../lib/local-media';
 import {
+  formatTimelineTime,
   getTimelineClipDuration,
   getTimelineClipWidth,
+  getTimelineContentXFromTime,
   getTimelineDuration,
   getTimelineRulerMarks,
+  getTimelineTimeFromContentX,
   getTimelineVisualWidth,
   type TimelineClip,
 } from '../lib/timeline';
@@ -21,6 +25,8 @@ interface EditorTimelineProps {
   selectedClipId: string | null;
   mediaDropIndex: number | null;
   filmstripManager: FilmstripFrameManager;
+  currentTimelineTime: number;
+  onSeek: (time: number) => void;
   onSelectClip: (clip: TimelineClip) => void;
 }
 
@@ -117,10 +123,13 @@ export function EditorTimeline({
   selectedClipId,
   mediaDropIndex,
   filmstripManager,
+  currentTimelineTime,
+  onSeek,
   onSelectClip,
 }: EditorTimelineProps) {
   const { isOver, setNodeRef } = useDroppable({ id: timelineTrackDndId });
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
+  const scrollContentRef = useRef<HTMLDivElement>(null);
   const mediaById = useMemo(
     () => new Map(mediaItems.map((media) => [media.id, media])),
     [mediaItems],
@@ -130,11 +139,33 @@ export function EditorTimeline({
   const rulerMarks = getTimelineRulerMarks(rulerDuration);
   const clipsWidth = getTimelineVisualWidth(clips);
   const timelineWidth = Math.max(minimumTimelineContentWidth, clipsWidth);
-  const rulerWidth = timelineDuration > 0 ? clipsWidth : timelineWidth;
+  const playheadX = getTimelineContentXFromTime(currentTimelineTime, timelineDuration);
   const insertionOffset =
     mediaDropIndex === null
       ? null
       : getTimelineVisualWidth(clips.slice(0, Math.min(Math.max(0, mediaDropIndex), clips.length)));
+
+  const getTimeAtClientX = (clientX: number): number => {
+    const content = scrollContentRef.current;
+
+    if (!scrollRoot || !content || timelineDuration <= 0) {
+      return 0;
+    }
+
+    const viewportRectangle = scrollRoot.getBoundingClientRect();
+    const contentRectangle = content.getBoundingClientRect();
+    const contentOriginOffset =
+      contentRectangle.left - viewportRectangle.left + scrollRoot.scrollLeft;
+    const contentX = clientX - viewportRectangle.left + scrollRoot.scrollLeft - contentOriginOffset;
+
+    return getTimelineTimeFromContentX(contentX, timelineDuration);
+  };
+
+  const handleTimelineClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (timelineDuration > 0) {
+      onSeek(getTimeAtClientX(event.clientX));
+    }
+  };
 
   return (
     <section className="timeline-shell" aria-label="Dòng thời gian">
@@ -151,9 +182,7 @@ export function EditorTimeline({
           </button>
         </div>
         <span className="timeline-phase-badge">
-          {clips.length > 0
-            ? `${clips.length} clip · ${formatMediaDuration(timelineDuration)}`
-            : 'Chưa có clip'}
+          {formatTimelineTime(currentTimelineTime)} / {formatTimelineTime(timelineDuration)}
         </span>
       </div>
 
@@ -163,10 +192,15 @@ export function EditorTimeline({
           <strong>Video 1</strong>
         </div>
         <div ref={setScrollRoot} className="timeline-scroll-area">
-          <div className="timeline-scroll-content" style={{ width: timelineWidth }}>
+          <div
+            ref={scrollContentRef}
+            className="timeline-scroll-content"
+            style={{ width: timelineWidth }}
+            onClick={handleTimelineClick}
+          >
             <div className="timeline-ruler" aria-hidden="true">
               {rulerMarks.map((time) => (
-                <span key={time} style={{ left: (time / rulerDuration) * rulerWidth }}>
+                <span key={time} style={{ left: getTimelineContentXFromTime(time, rulerDuration) }}>
                   {formatMediaDuration(time)}
                 </span>
               ))}
@@ -215,6 +249,13 @@ export function EditorTimeline({
                 />
               ) : null}
             </div>
+            {clips.length > 0 ? (
+              <TimelinePlayhead
+                currentTime={currentTimelineTime}
+                positionX={playheadX}
+                onScrubClientX={(clientX) => onSeek(getTimeAtClientX(clientX))}
+              />
+            ) : null}
           </div>
         </div>
       </div>

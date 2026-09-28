@@ -766,6 +766,7 @@ video:focus-visible {
 .timeline-scroll-content {
   position: relative;
   min-width: 100%;
+  min-height: 100%;
 }
 
 .timeline-ruler {
@@ -773,6 +774,7 @@ video:focus-visible {
   height: 34px;
   border-bottom: 1px solid #2d2f36;
   color: #656872;
+  cursor: pointer;
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 0.56rem;
 }
@@ -802,19 +804,22 @@ video:focus-visible {
   position: relative;
   height: 86px;
   margin-top: 10px;
-  border: 1px solid #30323a;
+  padding-block: 1px;
+  border: 0;
   border-radius: 6px;
   background: #1c1e23;
+  box-shadow: inset 0 0 0 1px #30323a;
+  cursor: pointer;
   transition:
-    border-color 120ms ease,
     background 120ms ease,
     box-shadow 120ms ease;
 }
 
 .timeline-track-surface-over {
-  border-color: #4ebfac;
   background: #1b2928;
-  box-shadow: inset 0 0 0 1px rgb(98 230 211 / 10%);
+  box-shadow:
+    inset 0 0 0 1px #4ebfac,
+    inset 0 0 0 2px rgb(98 230 211 / 10%);
 }
 
 .timeline-clips {
@@ -960,6 +965,83 @@ video:focus-visible {
   border-radius: 2px;
   background: #f5f7f7;
   content: '';
+}
+
+.timeline-playhead {
+  position: absolute;
+  z-index: 7;
+  top: 27px;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.timeline-playhead-handle {
+  position: absolute;
+  z-index: 1;
+  top: -5px;
+  left: 0;
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.timeline-playhead-handle::before {
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 22px;
+  height: 17px;
+  transform: translateX(-50%);
+  border-radius: 6px 6px 8px 8px;
+  background: #f3f5f5;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 52%);
+  content: '';
+}
+
+.timeline-playhead-handle::after {
+  position: absolute;
+  top: 11px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: #29302f;
+  content: '';
+}
+
+.timeline-playhead-handle:hover::before {
+  background: #ffffff;
+}
+
+.timeline-playhead-line {
+  position: absolute;
+  top: 7px;
+  bottom: 0;
+  left: -1px;
+  width: 2px;
+  background: #f3f5f5;
+  box-shadow: 0 0 0 1px rgb(98 230 211 / 20%);
+  pointer-events: none;
+}
+
+.timeline-playhead-scrubbing .timeline-playhead-handle::before {
+  background: #7cf3df;
+}
+
+.timeline-playhead-scrubbing .timeline-playhead-handle {
+  cursor: grabbing;
+}
+
+.timeline-playhead-scrubbing .timeline-playhead-line {
+  background: #7cf3df;
 }
 
 .empty-video-track {

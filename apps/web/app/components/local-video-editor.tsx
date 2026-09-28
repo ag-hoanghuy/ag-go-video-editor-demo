@@ -15,11 +15,16 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import type { ChangeEvent } from 'react';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { EditorDragOverlay } from './editor-drag-overlay';
 import { EditorTimeline } from './editor-timeline';
 import { MediaLibrary } from './media-library';
 import { useFilmstripFrameManager } from '../hooks/use-filmstrip-frame-manager';
+import {
+  useLocalVideoPreview,
+  type LocalVideoPreviewTarget,
+  type PreviewControlMode,
+} from '../hooks/use-local-video-preview';
 import { readEditorDragData, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
 import {
   createLocalVideoThumbnail,
@@ -30,7 +35,14 @@ import {
   readLocalVideoDuration,
   type LocalMediaItem,
 } from '../lib/local-media';
-import { createTimelineClip, insertTimelineClip, type TimelineClip } from '../lib/timeline';
+import {
+  clampTimelineTime,
+  createTimelineClip,
+  getTimelineDuration,
+  getTimelinePositionAtTime,
+  insertTimelineClip,
+  type TimelineClip,
+} from '../lib/timeline';
 
 interface EditorState {
   mediaItems: LocalMediaItem[];
@@ -59,7 +71,8 @@ interface ManagedMediaResource {
 }
 
 interface PreviewWorkspaceProps {
-  activeMedia: LocalMediaItem | null;
+  media: LocalMediaItem | null;
+  target: LocalVideoPreviewTarget | null;
 }
 
 const initialEditorState: EditorState = {
@@ -264,28 +277,23 @@ function ToolRail() {
   );
 }
 
-function PreviewWorkspace({ activeMedia }: PreviewWorkspaceProps) {
+function PreviewWorkspace({ media, target }: PreviewWorkspaceProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useLocalVideoPreview(videoRef, target);
+
   return (
     <section className="preview-workspace" aria-label="Khu vực xem trước">
       <div className="preview-toolbar">
         <div>
           <span className="panel-kicker">Xem trước</span>
-          <strong>{activeMedia?.file.name ?? 'Chưa chọn video'}</strong>
+          <strong>{media?.file.name ?? 'Chưa chọn video'}</strong>
         </div>
-        <span className="preview-duration">
-          {formatMediaDuration(activeMedia?.duration ?? null)}
-        </span>
+        <span className="preview-duration">{formatMediaDuration(media?.duration ?? null)}</span>
       </div>
 
       <div className="preview-stage">
-        {activeMedia ? (
-          <video
-            key={activeMedia.id}
-            className="local-video-player"
-            src={activeMedia.objectUrl}
-            preload="metadata"
-            controls
-          >
+        {media ? (
+          <video ref={videoRef} className="local-video-player" preload="metadata" controls>
             Trình duyệt của bạn không hỗ trợ phát video.
           </video>
         ) : (
@@ -300,7 +308,13 @@ function PreviewWorkspace({ activeMedia }: PreviewWorkspaceProps) {
       </div>
 
       <div className="preview-footer">
-        <span>{activeMedia ? 'Đang xem video cục bộ' : 'Không có phương tiện đang chọn'}</span>
+        <span>
+          {media
+            ? target?.mode === 'timeline'
+              ? 'Đang xem theo vị trí dòng thời gian'
+              : 'Đang xem video cục bộ'
+            : 'Không có phương tiện đang chọn'}
+        </span>
         <span>16:9</span>
       </div>
     </section>
@@ -312,8 +326,13 @@ export function LocalVideoEditor() {
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [activeDragData, setActiveDragData] = useState<EditorDragData | null>(null);
   const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
+  const [currentTimelineTime, setCurrentTimelineTime] = useState(0);
+  const [previewControlMode, setPreviewControlMode] = useState<PreviewControlMode>('library');
+  const [previewRequestVersion, setPreviewRequestVersion] = useState(0);
   const filmstripFrameManager = useFilmstripFrameManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dndClickReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didDndDragRef = useRef(false);
   const initialPointerClientXRef = useRef<number | null>(null);
   const pointerOffsetXRef = useRef<number | null>(null);
   const processingQueueRef = useRef<LocalMediaItem[]>([]);
@@ -344,6 +363,14 @@ export function LocalVideoEditor() {
       }
 
       resources.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (dndClickReleaseTimerRef.current !== null) {
+        clearTimeout(dndClickReleaseTimerRef.current);
+      }
     };
   }, []);
 
@@ -503,8 +530,26 @@ export function LocalVideoEditor() {
     pointerOffsetXRef.current = null;
   };
 
+  const scheduleDndClickRelease = () => {
+    if (dndClickReleaseTimerRef.current !== null) {
+      clearTimeout(dndClickReleaseTimerRef.current);
+    }
+
+    dndClickReleaseTimerRef.current = setTimeout(() => {
+      didDndDragRef.current = false;
+      dndClickReleaseTimerRef.current = null;
+    }, 0);
+  };
+
   const handleDragStart = (event: DragStartEvent) => {
     const dragData = readEditorDragData(event.active.data.current);
+
+    if (dndClickReleaseTimerRef.current !== null) {
+      clearTimeout(dndClickReleaseTimerRef.current);
+      dndClickReleaseTimerRef.current = null;
+    }
+
+    didDndDragRef.current = true;
     initialPointerClientXRef.current =
       event.activatorEvent instanceof MouseEvent ? event.activatorEvent.clientX : null;
 
@@ -537,9 +582,11 @@ export function LocalVideoEditor() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     const dragData = readEditorDragData(event.active.data.current);
+    let timelineChanged = false;
 
     if (!dragData) {
       clearDragState();
+      scheduleDndClickRelease();
       return;
     }
 
@@ -551,6 +598,7 @@ export function LocalVideoEditor() {
 
       if (clip && insertionIndex !== null) {
         dispatch({ type: 'add-timeline-clip', clip, insertionIndex });
+        timelineChanged = true;
       }
     } else {
       const activeIndex = editorState.timelineClips.findIndex(
@@ -568,14 +616,77 @@ export function LocalVideoEditor() {
           type: 'reorder-timeline-clips',
           clips: arrayMove(editorState.timelineClips, activeIndex, overIndex),
         });
+        timelineChanged = true;
       }
     }
 
+    if (timelineChanged) {
+      setPreviewControlMode('timeline');
+      setPreviewRequestVersion((version) => version + 1);
+    }
+
     clearDragState();
+    scheduleDndClickRelease();
   };
 
-  const activeMedia =
+  const handleDragCancel = () => {
+    clearDragState();
+    scheduleDndClickRelease();
+  };
+
+  const timelineDuration = getTimelineDuration(editorState.timelineClips);
+  const safeTimelineTime = clampTimelineTime(currentTimelineTime, timelineDuration);
+  const mediaDurations = useMemo(
+    () => new Map(editorState.mediaItems.map((media) => [media.id, media.duration])),
+    [editorState.mediaItems],
+  );
+  const timelinePosition = useMemo(
+    () => getTimelinePositionAtTime(editorState.timelineClips, safeTimelineTime, mediaDurations),
+    [editorState.timelineClips, mediaDurations, safeTimelineTime],
+  );
+  const libraryMedia =
     editorState.mediaItems.find((item) => item.id === editorState.activeMediaId) ?? null;
+  const timelineMedia =
+    editorState.mediaItems.find((item) => item.id === timelinePosition?.clip.mediaId) ?? null;
+  const previewMedia = previewControlMode === 'timeline' ? timelineMedia : libraryMedia;
+  const previewTarget = useMemo<LocalVideoPreviewTarget | null>(() => {
+    if (!previewMedia) {
+      return null;
+    }
+
+    return {
+      mediaId: previewMedia.id,
+      objectUrl: previewMedia.objectUrl,
+      mode: previewControlMode,
+      requestVersion: previewRequestVersion,
+      sourceTime: previewControlMode === 'timeline' ? (timelinePosition?.sourceTime ?? null) : null,
+    };
+  }, [previewControlMode, previewMedia, previewRequestVersion, timelinePosition?.sourceTime]);
+
+  const handleLibrarySelect = (id: string) => {
+    if (didDndDragRef.current) {
+      return;
+    }
+
+    dispatch({ type: 'select-media', id });
+    setPreviewControlMode('library');
+  };
+
+  const handleTimelineSeek = (time: number) => {
+    if (didDndDragRef.current) {
+      return;
+    }
+
+    setCurrentTimelineTime(clampTimelineTime(time, timelineDuration));
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  };
+
+  const handleTimelineClipSelect = (clip: TimelineClip) => {
+    if (!didDndDragRef.current) {
+      dispatch({ type: 'select-timeline-clip', clip });
+    }
+  };
 
   return (
     <main className="editor-shell">
@@ -586,7 +697,7 @@ export function LocalVideoEditor() {
         onDragStart={handleDragStart}
         onDragMove={updateMediaDropIndex}
         onDragOver={updateMediaDropIndex}
-        onDragCancel={clearDragState}
+        onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
         <div className="editor-body">
@@ -598,10 +709,10 @@ export function LocalVideoEditor() {
               libraryMessage={libraryMessage}
               fileInputRef={fileInputRef}
               onImport={handleImport}
-              onSelect={(id) => dispatch({ type: 'select-media', id })}
+              onSelect={handleLibrarySelect}
               onRemove={handleRemove}
             />
-            <PreviewWorkspace activeMedia={activeMedia} />
+            <PreviewWorkspace media={previewMedia} target={previewTarget} />
           </div>
           <EditorTimeline
             clips={editorState.timelineClips}
@@ -609,7 +720,9 @@ export function LocalVideoEditor() {
             selectedClipId={editorState.selectedClipId}
             mediaDropIndex={mediaDropIndex}
             filmstripManager={filmstripFrameManager}
-            onSelectClip={(clip) => dispatch({ type: 'select-timeline-clip', clip })}
+            currentTimelineTime={safeTimelineTime}
+            onSeek={handleTimelineSeek}
+            onSelectClip={handleTimelineClipSelect}
           />
         </div>
 

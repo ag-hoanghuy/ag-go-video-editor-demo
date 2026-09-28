@@ -11,6 +11,7 @@
     "dev": "pnpm --parallel --filter @ag-go-video-editor/web --filter @ag-go-video-editor/api dev",
     "build": "pnpm --recursive --if-present build",
     "typecheck": "pnpm --recursive --if-present typecheck",
+    "test": "pnpm --recursive --if-present test",
     "lint": "eslint apps packages",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
