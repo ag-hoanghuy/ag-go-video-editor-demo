@@ -19,6 +19,7 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { EditorDragOverlay } from './editor-drag-overlay';
 import { EditorTimeline } from './editor-timeline';
 import { MediaLibrary } from './media-library';
+import { useFilmstripFrameManager } from '../hooks/use-filmstrip-frame-manager';
 import { readEditorDragData, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
 import {
   createLocalVideoThumbnail,
@@ -311,6 +312,7 @@ export function LocalVideoEditor() {
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [activeDragData, setActiveDragData] = useState<EditorDragData | null>(null);
   const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
+  const filmstripFrameManager = useFilmstripFrameManager();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initialPointerClientXRef = useRef<number | null>(null);
   const pointerOffsetXRef = useRef<number | null>(null);
@@ -475,6 +477,7 @@ export function LocalVideoEditor() {
       return;
     }
 
+    filmstripFrameManager.removeMedia(id);
     const resource = resourcesRef.current.get(id);
 
     if (resource) {
@@ -605,6 +608,7 @@ export function LocalVideoEditor() {
             mediaItems={editorState.mediaItems}
             selectedClipId={editorState.selectedClipId}
             mediaDropIndex={mediaDropIndex}
+            filmstripManager={filmstripFrameManager}
             onSelectClip={(clip) => dispatch({ type: 'select-timeline-clip', clip })}
           />
         </div>

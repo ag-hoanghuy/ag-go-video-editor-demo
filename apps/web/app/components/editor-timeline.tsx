@@ -1,8 +1,10 @@
 import { useDroppable } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { TimelineFilmstrip } from './timeline-filmstrip';
 import { getTimelineClipDndId, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
+import type { FilmstripFrameManager } from '../lib/filmstrip-frame-manager';
 import { formatMediaDuration, type LocalMediaItem } from '../lib/local-media';
 import {
   getTimelineClipDuration,
@@ -18,26 +20,38 @@ interface EditorTimelineProps {
   mediaItems: LocalMediaItem[];
   selectedClipId: string | null;
   mediaDropIndex: number | null;
+  filmstripManager: FilmstripFrameManager;
   onSelectClip: (clip: TimelineClip) => void;
 }
 
 interface TimelineClipVisualProps {
   clip: TimelineClip;
+  clipWidth: number;
+  filmstripManager: FilmstripFrameManager;
   media: LocalMediaItem;
   isSelected?: boolean;
+  scrollRoot: HTMLDivElement | null;
 }
 
 const emptyTimelineDuration = 25;
 const minimumTimelineContentWidth = 620;
 
-function TimelineClipVisual({ clip, media, isSelected = false }: TimelineClipVisualProps) {
+function TimelineClipVisual({
+  clip,
+  clipWidth,
+  filmstripManager,
+  media,
+  isSelected = false,
+  scrollRoot,
+}: TimelineClipVisualProps) {
   return (
     <div className={`timeline-clip-visual${isSelected ? ' timeline-clip-selected' : ''}`}>
-      <div
-        className="timeline-clip-thumbnail"
-        role="img"
-        aria-label={`Ảnh xem trước của ${media.file.name}`}
-        style={media.thumbnailUrl ? { backgroundImage: `url(${media.thumbnailUrl})` } : undefined}
+      <TimelineFilmstrip
+        clip={clip}
+        clipWidth={clipWidth}
+        media={media}
+        manager={filmstripManager}
+        scrollRoot={scrollRoot}
       />
       <div className="timeline-clip-copy">
         <strong>{media.file.name}</strong>
@@ -49,22 +63,27 @@ function TimelineClipVisual({ clip, media, isSelected = false }: TimelineClipVis
 
 function SortableTimelineClip({
   clip,
+  filmstripManager,
   media,
   isSelected,
   onSelect,
+  scrollRoot,
 }: {
   clip: TimelineClip;
+  filmstripManager: FilmstripFrameManager;
   media: LocalMediaItem;
   isSelected: boolean;
   onSelect: (clip: TimelineClip) => void;
+  scrollRoot: HTMLDivElement | null;
 }) {
   const dragData = { type: 'timeline-clip', clipId: clip.id } satisfies EditorDragData;
   const { attributes, isDragging, listeners, setNodeRef, transform, transition } = useSortable({
     id: getTimelineClipDndId(clip.id),
     data: dragData,
   });
+  const clipWidth = getTimelineClipWidth(clip);
   const style: CSSProperties = {
-    width: getTimelineClipWidth(clip),
+    width: clipWidth,
     transform: CSS.Transform.toString(transform),
     transition,
   };
@@ -75,11 +94,19 @@ function SortableTimelineClip({
       className={`timeline-clip${isDragging ? ' timeline-clip-dragging' : ''}`}
       type="button"
       style={style}
+      aria-label={`${media.file.name}, ${formatMediaDuration(getTimelineClipDuration(clip))}`}
       onClick={() => onSelect(clip)}
       {...attributes}
       {...listeners}
     >
-      <TimelineClipVisual clip={clip} media={media} isSelected={isSelected} />
+      <TimelineClipVisual
+        clip={clip}
+        clipWidth={clipWidth}
+        filmstripManager={filmstripManager}
+        media={media}
+        isSelected={isSelected}
+        scrollRoot={scrollRoot}
+      />
     </button>
   );
 }
@@ -89,9 +116,11 @@ export function EditorTimeline({
   mediaItems,
   selectedClipId,
   mediaDropIndex,
+  filmstripManager,
   onSelectClip,
 }: EditorTimelineProps) {
   const { isOver, setNodeRef } = useDroppable({ id: timelineTrackDndId });
+  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
   const mediaById = useMemo(
     () => new Map(mediaItems.map((media) => [media.id, media])),
     [mediaItems],
@@ -133,7 +162,7 @@ export function EditorTimeline({
           <span aria-hidden="true">▣</span>
           <strong>Video 1</strong>
         </div>
-        <div className="timeline-scroll-area">
+        <div ref={setScrollRoot} className="timeline-scroll-area">
           <div className="timeline-scroll-content" style={{ width: timelineWidth }}>
             <div className="timeline-ruler" aria-hidden="true">
               {rulerMarks.map((time) => (
@@ -159,9 +188,11 @@ export function EditorTimeline({
                         <SortableTimelineClip
                           key={clip.id}
                           clip={clip}
+                          filmstripManager={filmstripManager}
                           media={media}
                           isSelected={clip.id === selectedClipId}
                           onSelect={onSelectClip}
+                          scrollRoot={scrollRoot}
                         />
                       ) : null;
                     })}
