@@ -38,9 +38,7 @@ export class RendersService {
     let temporaryDirectory: string | undefined;
 
     try {
-      this.logger.log(
-        `Render ${renderId}: create temp directory for asset ${request.assetId}`,
-      );
+      this.logger.log(`Render ${renderId}: create temp directory for asset ${request.assetId}`);
 
       const temporaryRoot = tmpdir();
 
@@ -48,9 +46,7 @@ export class RendersService {
         recursive: true,
       });
 
-      temporaryDirectory = await mkdtemp(
-        join(temporaryRoot, 'ag-go-video-render-'),
-      );
+      temporaryDirectory = await mkdtemp(join(temporaryRoot, 'ag-go-video-render-'));
 
       const sourcePath = join(temporaryDirectory, 'source.mp4');
       const outputPath = join(temporaryDirectory, 'output.mp4');
@@ -107,8 +103,7 @@ export class RendersService {
     const outputKey = createRenderOutputObjectKey(renderId);
 
     try {
-      const presignedUrl =
-        await this.storageService.createPresignedGetUrl(outputKey);
+      const presignedUrl = await this.storageService.createPresignedGetUrl(outputKey);
 
       return {
         renderId,
@@ -151,9 +146,7 @@ export class RendersService {
     });
   }
 
-  private async removeTemporaryDirectory(
-    temporaryDirectory: string,
-  ): Promise<void> {
+  private async removeTemporaryDirectory(temporaryDirectory: string): Promise<void> {
     try {
       await rm(temporaryDirectory, {
         recursive: true,
