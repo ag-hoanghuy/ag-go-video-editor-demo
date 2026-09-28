@@ -11,7 +11,7 @@ services:
     autoDeployTrigger: commit
     envVars:
       - key: PORT
-        value: "3001"
+        value: '3001'
       - key: WEB_URL
         fromService:
           name: ag-go-video-editor-web
@@ -28,7 +28,7 @@ services:
       - key: R2_ENDPOINT
         sync: false
       - key: R2_PRESIGNED_URL_TTL_SECONDS
-        value: "900"
+        value: '900'
 
   - type: web
     name: ag-go-video-editor-web
@@ -42,7 +42,7 @@ services:
     autoDeployTrigger: commit
     envVars:
       - key: PORT
-        value: "3000"
+        value: '3000'
       - key: NEXT_PUBLIC_API_URL
         fromService:
           name: ag-go-video-editor-api
