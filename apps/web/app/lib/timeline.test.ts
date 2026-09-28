@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  deleteTimelineClip,
   getTimelineContentXFromTime,
+  getTimelineDuration,
   getTimelinePositionAtTime,
+  getTimelineSecondsFromPixelDelta,
+  getTimelineSplitSourceTime,
   getTimelineTimeFromContentX,
+  minimumTimelineClipDuration,
+  splitTimelineClip,
+  trimTimelineClip,
   type TimelineClip,
 } from './timeline';
 
@@ -60,6 +67,11 @@ describe('getTimelinePositionAtTime', () => {
 });
 
 describe('timeline pixel mapping', () => {
+  it('converts trim drag pixels to seconds with the shared timeline scale', () => {
+    expect(getTimelineSecondsFromPixelDelta(40)).toBe(2);
+    expect(getTimelineSecondsFromPixelDelta(-20)).toBe(-1);
+  });
+
   it('maps content pixels to timeline time and clamps to duration', () => {
     expect(getTimelineTimeFromContentX(160, 12)).toBe(8);
     expect(getTimelineTimeFromContentX(-20, 12)).toBe(0);
@@ -70,5 +82,88 @@ describe('timeline pixel mapping', () => {
     expect(getTimelineContentXFromTime(8, 12)).toBe(160);
     expect(getTimelineContentXFromTime(-1, 12)).toBe(0);
     expect(getTimelineContentXFromTime(15, 12)).toBe(240);
+  });
+});
+
+describe('trimTimelineClip', () => {
+  const clip: TimelineClip = {
+    id: 'clip-trim',
+    mediaId: 'media-a',
+    trimStart: 2,
+    trimEnd: 10,
+  };
+
+  it('trims the left edge without changing trimEnd', () => {
+    expect(trimTimelineClip(clip, 'start', 4, 20)).toEqual({
+      ...clip,
+      trimStart: 4,
+    });
+  });
+
+  it('trims the right edge without changing trimStart', () => {
+    expect(trimTimelineClip(clip, 'end', 8, 20)).toEqual({
+      ...clip,
+      trimEnd: 8,
+    });
+  });
+
+  it('clamps trim edges to source boundaries', () => {
+    expect(trimTimelineClip(clip, 'start', -5, 12).trimStart).toBe(0);
+    expect(trimTimelineClip(clip, 'end', 50, 12).trimEnd).toBe(12);
+  });
+
+  it('enforces the minimum clip duration', () => {
+    const leftTrimmed = trimTimelineClip(clip, 'start', clip.trimEnd, 20);
+    const rightTrimmed = trimTimelineClip(clip, 'end', clip.trimStart, 20);
+
+    expect(leftTrimmed.trimEnd - leftTrimmed.trimStart).toBeCloseTo(minimumTimelineClipDuration);
+    expect(rightTrimmed.trimEnd - rightTrimmed.trimStart).toBeCloseTo(minimumTimelineClipDuration);
+  });
+});
+
+describe('timeline split', () => {
+  it('splits a clip in the middle with two new IDs', () => {
+    const result = splitTimelineClip([clips[1]!], 'clip-b', 5, 'clip-b-left', 'clip-b-right');
+
+    expect(result).toEqual([
+      { id: 'clip-b-left', mediaId: 'media-b', trimStart: 2, trimEnd: 5 },
+      { id: 'clip-b-right', mediaId: 'media-b', trimStart: 5, trimEnd: 9 },
+    ]);
+  });
+
+  it('rejects a split at either clip boundary', () => {
+    expect(splitTimelineClip([clips[0]!], 'clip-a', 0, 'left', 'right')).toBeNull();
+    expect(splitTimelineClip([clips[0]!], 'clip-a', 5, 'left', 'right')).toBeNull();
+  });
+
+  it('maps a global playhead through a non-zero trimStart', () => {
+    expect(getTimelineSplitSourceTime(clips, 'clip-b', 8)).toBe(5);
+  });
+
+  it('rejects a split when the playhead is on another clip or too close to an edge', () => {
+    expect(getTimelineSplitSourceTime(clips, 'clip-a', 5)).toBeNull();
+    expect(getTimelineSplitSourceTime(clips, 'clip-b', 5.05)).toBeNull();
+  });
+});
+
+describe('deleteTimelineClip', () => {
+  it('deletes a middle clip and keeps no-gap duration derived from the remaining clips', () => {
+    const threeClips: TimelineClip[] = [
+      clips[0]!,
+      clips[1]!,
+      { id: 'clip-c', mediaId: 'media-c', trimStart: 3, trimEnd: 7 },
+    ];
+    const result = deleteTimelineClip(threeClips, 'clip-b');
+
+    expect(result.map((clip) => clip.id)).toEqual(['clip-a', 'clip-c']);
+    expect(getTimelineDuration(result)).toBe(9);
+  });
+
+  it('deletes the final clip', () => {
+    expect(deleteTimelineClip(clips, 'clip-b')).toEqual([clips[0]]);
+  });
+
+  it('returns an empty timeline after deleting the only clip', () => {
+    expect(deleteTimelineClip([clips[0]!], 'clip-a')).toEqual([]);
   });
 });

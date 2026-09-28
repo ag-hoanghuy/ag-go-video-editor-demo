@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { TimelineFilmstrip } from './timeline-filmstrip';
 import { TimelinePlayhead } from './timeline-playhead';
+import { TimelineTrimHandle } from './timeline-trim-handle';
 import { getTimelineClipDndId, timelineTrackDndId, type EditorDragData } from '../lib/editor-dnd';
 import type { FilmstripFrameManager } from '../lib/filmstrip-frame-manager';
 import { formatMediaDuration, type LocalMediaItem } from '../lib/local-media';
@@ -17,6 +18,7 @@ import {
   getTimelineTimeFromContentX,
   getTimelineVisualWidth,
   type TimelineClip,
+  type TimelineTrimEdge,
 } from '../lib/timeline';
 
 interface EditorTimelineProps {
@@ -26,8 +28,18 @@ interface EditorTimelineProps {
   mediaDropIndex: number | null;
   filmstripManager: FilmstripFrameManager;
   currentTimelineTime: number;
+  canDeleteSelectedClip: boolean;
+  canSplitSelectedClip: boolean;
+  onDeleteSelectedClip: () => void;
   onSeek: (time: number) => void;
   onSelectClip: (clip: TimelineClip) => void;
+  onSplitSelectedClip: () => void;
+  onTrimClip: (
+    clipId: string,
+    edge: TimelineTrimEdge,
+    requestedSourceTime: number,
+    mediaDuration: number,
+  ) => void;
 }
 
 interface TimelineClipVisualProps {
@@ -73,6 +85,7 @@ function SortableTimelineClip({
   media,
   isSelected,
   onSelect,
+  onTrim,
   scrollRoot,
 }: {
   clip: TimelineClip;
@@ -80,6 +93,7 @@ function SortableTimelineClip({
   media: LocalMediaItem;
   isSelected: boolean;
   onSelect: (clip: TimelineClip) => void;
+  onTrim: EditorTimelineProps['onTrimClip'];
   scrollRoot: HTMLDivElement | null;
 }) {
   const dragData = { type: 'timeline-clip', clipId: clip.id } satisfies EditorDragData;
@@ -95,10 +109,9 @@ function SortableTimelineClip({
   };
 
   return (
-    <button
+    <div
       ref={setNodeRef}
-      className={`timeline-clip${isDragging ? ' timeline-clip-dragging' : ''}`}
-      type="button"
+      className={`timeline-clip${isSelected ? ' timeline-clip-selected-container' : ''}${isDragging ? ' timeline-clip-dragging' : ''}`}
       style={style}
       aria-label={`${media.file.name}, ${formatMediaDuration(getTimelineClipDuration(clip))}`}
       onClick={() => onSelect(clip)}
@@ -113,7 +126,21 @@ function SortableTimelineClip({
         isSelected={isSelected}
         scrollRoot={scrollRoot}
       />
-    </button>
+      <TimelineTrimHandle
+        clip={clip}
+        edge="start"
+        mediaDuration={media.duration ?? clip.trimEnd}
+        onSelect={onSelect}
+        onTrim={onTrim}
+      />
+      <TimelineTrimHandle
+        clip={clip}
+        edge="end"
+        mediaDuration={media.duration ?? clip.trimEnd}
+        onSelect={onSelect}
+        onTrim={onTrim}
+      />
+    </div>
   );
 }
 
@@ -124,8 +151,13 @@ export function EditorTimeline({
   mediaDropIndex,
   filmstripManager,
   currentTimelineTime,
+  canDeleteSelectedClip,
+  canSplitSelectedClip,
+  onDeleteSelectedClip,
   onSeek,
   onSelectClip,
+  onSplitSelectedClip,
+  onTrimClip,
 }: EditorTimelineProps) {
   const { isOver, setNodeRef } = useDroppable({ id: timelineTrackDndId });
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -172,11 +204,11 @@ export function EditorTimeline({
       <div className="timeline-toolbar-shell">
         <strong>Dòng thời gian</strong>
         <div className="timeline-actions-shell">
-          <button type="button" disabled>
+          <button type="button" disabled={!canSplitSelectedClip} onClick={onSplitSelectedClip}>
             <span aria-hidden="true">✂</span>
             Tách
           </button>
-          <button type="button" disabled>
+          <button type="button" disabled={!canDeleteSelectedClip} onClick={onDeleteSelectedClip}>
             <span aria-hidden="true">⌫</span>
             Xóa
           </button>
@@ -226,6 +258,7 @@ export function EditorTimeline({
                           media={media}
                           isSelected={clip.id === selectedClipId}
                           onSelect={onSelectClip}
+                          onTrim={onTrimClip}
                           scrollRoot={scrollRoot}
                         />
                       ) : null;

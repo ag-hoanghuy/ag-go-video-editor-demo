@@ -38,10 +38,16 @@ import {
 import {
   clampTimelineTime,
   createTimelineClip,
+  deleteTimelineClip,
+  getTimelineClipDuration,
   getTimelineDuration,
   getTimelinePositionAtTime,
+  getTimelineSplitSourceTime,
   insertTimelineClip,
+  splitTimelineClip,
+  trimTimelineClip,
   type TimelineClip,
+  type TimelineTrimEdge,
 } from '../lib/timeline';
 
 interface EditorState {
@@ -62,7 +68,22 @@ type EditorAction =
   | { type: 'remove-media'; id: string }
   | { type: 'add-timeline-clip'; clip: TimelineClip; insertionIndex: number }
   | { type: 'reorder-timeline-clips'; clips: TimelineClip[] }
-  | { type: 'select-timeline-clip'; clip: TimelineClip };
+  | { type: 'select-timeline-clip'; clip: TimelineClip }
+  | {
+      type: 'trim-timeline-clip';
+      clipId: string;
+      edge: TimelineTrimEdge;
+      requestedSourceTime: number;
+      mediaDuration: number;
+    }
+  | {
+      type: 'split-timeline-clip';
+      clipId: string;
+      sourceTime: number;
+      leftClipId: string;
+      rightClipId: string;
+    }
+  | { type: 'delete-timeline-clip'; clipId: string };
 
 interface ManagedMediaResource {
   objectUrl: string;
@@ -143,6 +164,76 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
             activeMediaId: action.clip.mediaId,
           }
         : state;
+    case 'trim-timeline-clip': {
+      const clipIndex = state.timelineClips.findIndex((clip) => clip.id === action.clipId);
+      const clip = state.timelineClips[clipIndex];
+
+      if (!clip) {
+        return state;
+      }
+
+      const trimmedClip = trimTimelineClip(
+        clip,
+        action.edge,
+        action.requestedSourceTime,
+        action.mediaDuration,
+      );
+
+      if (trimmedClip === clip) {
+        return state;
+      }
+
+      const timelineClips = [...state.timelineClips];
+      timelineClips[clipIndex] = trimmedClip;
+
+      return {
+        ...state,
+        timelineClips,
+        selectedClipId: clip.id,
+        activeMediaId: clip.mediaId,
+      };
+    }
+    case 'split-timeline-clip': {
+      const originalClip = state.timelineClips.find((clip) => clip.id === action.clipId);
+      const timelineClips = splitTimelineClip(
+        state.timelineClips,
+        action.clipId,
+        action.sourceTime,
+        action.leftClipId,
+        action.rightClipId,
+      );
+
+      if (!originalClip || !timelineClips) {
+        return state;
+      }
+
+      return {
+        ...state,
+        timelineClips,
+        selectedClipId: action.rightClipId,
+        activeMediaId: originalClip.mediaId,
+      };
+    }
+    case 'delete-timeline-clip': {
+      const removedIndex = state.timelineClips.findIndex((clip) => clip.id === action.clipId);
+
+      if (removedIndex === -1) {
+        return state;
+      }
+
+      const timelineClips = deleteTimelineClip(state.timelineClips, action.clipId);
+      const selectedClip =
+        state.selectedClipId === action.clipId
+          ? (timelineClips[Math.min(removedIndex, timelineClips.length - 1)] ?? null)
+          : (timelineClips.find((clip) => clip.id === state.selectedClipId) ?? null);
+
+      return {
+        ...state,
+        timelineClips,
+        selectedClipId: selectedClip?.id ?? null,
+        activeMediaId: selectedClip?.mediaId ?? state.activeMediaId,
+      };
+    }
   }
 }
 
@@ -644,6 +735,15 @@ export function LocalVideoEditor() {
     () => getTimelinePositionAtTime(editorState.timelineClips, safeTimelineTime, mediaDurations),
     [editorState.timelineClips, mediaDurations, safeTimelineTime],
   );
+  const selectedTimelineClip =
+    editorState.timelineClips.find((clip) => clip.id === editorState.selectedClipId) ?? null;
+  const selectedSplitSourceTime = editorState.selectedClipId
+    ? getTimelineSplitSourceTime(
+        editorState.timelineClips,
+        editorState.selectedClipId,
+        safeTimelineTime,
+      )
+    : null;
   const libraryMedia =
     editorState.mediaItems.find((item) => item.id === editorState.activeMediaId) ?? null;
   const timelineMedia =
@@ -688,6 +788,69 @@ export function LocalVideoEditor() {
     }
   };
 
+  const handleTimelineClipTrim = (
+    clipId: string,
+    edge: TimelineTrimEdge,
+    requestedSourceTime: number,
+    mediaDuration: number,
+  ) => {
+    const currentClip = editorState.timelineClips.find((clip) => clip.id === clipId);
+
+    if (!currentClip) {
+      return;
+    }
+
+    const trimmedClip = trimTimelineClip(currentClip, edge, requestedSourceTime, mediaDuration);
+    const nextTimelineDuration =
+      timelineDuration -
+      getTimelineClipDuration(currentClip) +
+      getTimelineClipDuration(trimmedClip);
+
+    dispatch({
+      type: 'trim-timeline-clip',
+      clipId,
+      edge,
+      requestedSourceTime,
+      mediaDuration,
+    });
+    setCurrentTimelineTime((time) => clampTimelineTime(time, nextTimelineDuration));
+    setPreviewControlMode('timeline');
+  };
+
+  const handleSplitSelectedClip = () => {
+    if (!selectedTimelineClip || selectedSplitSourceTime === null) {
+      return;
+    }
+
+    dispatch({
+      type: 'split-timeline-clip',
+      clipId: selectedTimelineClip.id,
+      sourceTime: selectedSplitSourceTime,
+      leftClipId: crypto.randomUUID(),
+      rightClipId: crypto.randomUUID(),
+    });
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  };
+
+  const handleDeleteSelectedClip = () => {
+    if (!selectedTimelineClip) {
+      return;
+    }
+
+    const nextTimelineClips = deleteTimelineClip(
+      editorState.timelineClips,
+      selectedTimelineClip.id,
+    );
+
+    dispatch({ type: 'delete-timeline-clip', clipId: selectedTimelineClip.id });
+    setCurrentTimelineTime((time) =>
+      clampTimelineTime(time, getTimelineDuration(nextTimelineClips)),
+    );
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  };
+
   return (
     <main className="editor-shell">
       <TopBar />
@@ -721,8 +884,13 @@ export function LocalVideoEditor() {
             mediaDropIndex={mediaDropIndex}
             filmstripManager={filmstripFrameManager}
             currentTimelineTime={safeTimelineTime}
+            canDeleteSelectedClip={selectedTimelineClip !== null}
+            canSplitSelectedClip={selectedSplitSourceTime !== null}
+            onDeleteSelectedClip={handleDeleteSelectedClip}
             onSeek={handleTimelineSeek}
             onSelectClip={handleTimelineClipSelect}
+            onSplitSelectedClip={handleSplitSelectedClip}
+            onTrimClip={handleTimelineClipTrim}
           />
         </div>
 

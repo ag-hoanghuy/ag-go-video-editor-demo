@@ -14,10 +14,14 @@ export interface TimelinePosition {
   sourceTime: number;
 }
 
+export type TimelineTrimEdge = 'start' | 'end';
+
 export const timelinePixelsPerSecond = 20;
 export const minimumTimelineClipWidth = 72;
+export const minimumTimelineClipDuration = 0.1;
 
 const sourceTimeEpsilon = 0.001;
+const timelineComparisonEpsilon = 0.000000001;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -50,6 +54,114 @@ export function getTimelineClipDuration(clip: TimelineClip): number {
 
 export function getTimelineDuration(clips: TimelineClip[]): number {
   return clips.reduce((duration, clip) => duration + getTimelineClipDuration(clip), 0);
+}
+
+export function getTimelineSecondsFromPixelDelta(deltaX: number): number {
+  return Number.isFinite(deltaX) ? deltaX / timelinePixelsPerSecond : 0;
+}
+
+export function trimTimelineClip(
+  clip: TimelineClip,
+  edge: TimelineTrimEdge,
+  requestedSourceTime: number,
+  mediaDuration: number,
+): TimelineClip {
+  if (
+    !Number.isFinite(requestedSourceTime) ||
+    !Number.isFinite(mediaDuration) ||
+    mediaDuration <= 0
+  ) {
+    return clip;
+  }
+
+  if (edge === 'start') {
+    const maximumTrimStart = Math.min(
+      clip.trimEnd - minimumTimelineClipDuration,
+      mediaDuration - minimumTimelineClipDuration,
+    );
+
+    if (maximumTrimStart < 0) {
+      return clip;
+    }
+
+    const trimStart = clamp(requestedSourceTime, 0, maximumTrimStart);
+    return trimStart === clip.trimStart ? clip : { ...clip, trimStart };
+  }
+
+  const minimumTrimEnd = clip.trimStart + minimumTimelineClipDuration;
+
+  if (minimumTrimEnd > mediaDuration) {
+    return clip;
+  }
+
+  const trimEnd = clamp(requestedSourceTime, minimumTrimEnd, mediaDuration);
+  return trimEnd === clip.trimEnd ? clip : { ...clip, trimEnd };
+}
+
+export function canSplitTimelineClip(clip: TimelineClip, sourceTime: number): boolean {
+  if (!Number.isFinite(sourceTime)) {
+    return false;
+  }
+
+  const leftDuration = sourceTime - clip.trimStart;
+  const rightDuration = clip.trimEnd - sourceTime;
+
+  return (
+    leftDuration + timelineComparisonEpsilon >= minimumTimelineClipDuration &&
+    rightDuration + timelineComparisonEpsilon >= minimumTimelineClipDuration
+  );
+}
+
+export function getTimelineSplitSourceTime(
+  clips: TimelineClip[],
+  selectedClipId: string,
+  globalTime: number,
+): number | null {
+  const position = getTimelinePositionAtTime(clips, globalTime);
+
+  if (!position || position.clip.id !== selectedClipId) {
+    return null;
+  }
+
+  const sourceTime = position.clip.trimStart + position.localOffset;
+  return canSplitTimelineClip(position.clip, sourceTime) ? sourceTime : null;
+}
+
+export function splitTimelineClip(
+  clips: TimelineClip[],
+  clipId: string,
+  sourceTime: number,
+  leftClipId: string,
+  rightClipId: string,
+): TimelineClip[] | null {
+  const clipIndex = clips.findIndex((clip) => clip.id === clipId);
+  const clip = clips[clipIndex];
+  const idsAreValid =
+    leftClipId.length > 0 &&
+    rightClipId.length > 0 &&
+    leftClipId !== rightClipId &&
+    !clips.some((item) => item.id === leftClipId || item.id === rightClipId);
+
+  if (!clip || !idsAreValid || !canSplitTimelineClip(clip, sourceTime)) {
+    return null;
+  }
+
+  const leftClip: TimelineClip = {
+    ...clip,
+    id: leftClipId,
+    trimEnd: sourceTime,
+  };
+  const rightClip: TimelineClip = {
+    ...clip,
+    id: rightClipId,
+    trimStart: sourceTime,
+  };
+
+  return [...clips.slice(0, clipIndex), leftClip, rightClip, ...clips.slice(clipIndex + 1)];
+}
+
+export function deleteTimelineClip(clips: TimelineClip[], clipId: string): TimelineClip[] {
+  return clips.filter((clip) => clip.id !== clipId);
 }
 
 export function getTimelinePositionAtTime(
