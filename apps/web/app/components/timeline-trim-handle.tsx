@@ -9,7 +9,9 @@ interface TimelineTrimHandleProps {
   clip: TimelineClip;
   edge: TimelineTrimEdge;
   mediaDuration: number;
-  onSelect: (clip: TimelineClip) => void;
+  onTrimCancel: () => void;
+  onTrimCommit: () => void;
+  onTrimStart: (clip: TimelineClip) => void;
   onTrim: (
     clipId: string,
     edge: TimelineTrimEdge,
@@ -28,7 +30,9 @@ export function TimelineTrimHandle({
   clip,
   edge,
   mediaDuration,
-  onSelect,
+  onTrimCancel,
+  onTrimCommit,
+  onTrimStart,
   onTrim,
 }: TimelineTrimHandleProps) {
   const sessionRef = useRef<TrimSession | null>(null);
@@ -59,7 +63,7 @@ export function TimelineTrimHandle({
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     setIsTrimming(true);
-    onSelect(clip);
+    onTrimStart(clip);
   };
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -87,6 +91,7 @@ export function TimelineTrimHandle({
     }
 
     setIsTrimming(false);
+    onTrimCommit();
   };
 
   const cancelTrimming = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -103,12 +108,14 @@ export function TimelineTrimHandle({
     }
 
     setIsTrimming(false);
+    onTrimCancel();
   };
 
   const handleLostPointerCapture = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (sessionRef.current?.pointerId === event.pointerId) {
       sessionRef.current = null;
       setIsTrimming(false);
+      onTrimCancel();
     }
   };
 

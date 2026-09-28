@@ -29,17 +29,24 @@ interface EditorTimelineProps {
   filmstripManager: FilmstripFrameManager;
   currentTimelineTime: number;
   canDeleteSelectedClip: boolean;
+  canRedo: boolean;
   canSplitSelectedClip: boolean;
+  canUndo: boolean;
   onDeleteSelectedClip: () => void;
+  onRedo: () => void;
   onSeek: (time: number) => void;
   onSelectClip: (clip: TimelineClip) => void;
   onSplitSelectedClip: () => void;
+  onTrimCancel: () => void;
+  onTrimCommit: () => void;
   onTrimClip: (
     clipId: string,
     edge: TimelineTrimEdge,
     requestedSourceTime: number,
     mediaDuration: number,
   ) => void;
+  onTrimStart: (clip: TimelineClip) => void;
+  onUndo: () => void;
 }
 
 interface TimelineClipVisualProps {
@@ -85,7 +92,10 @@ function SortableTimelineClip({
   media,
   isSelected,
   onSelect,
+  onTrimCancel,
+  onTrimCommit,
   onTrim,
+  onTrimStart,
   scrollRoot,
 }: {
   clip: TimelineClip;
@@ -93,7 +103,10 @@ function SortableTimelineClip({
   media: LocalMediaItem;
   isSelected: boolean;
   onSelect: (clip: TimelineClip) => void;
+  onTrimCancel: EditorTimelineProps['onTrimCancel'];
+  onTrimCommit: EditorTimelineProps['onTrimCommit'];
   onTrim: EditorTimelineProps['onTrimClip'];
+  onTrimStart: EditorTimelineProps['onTrimStart'];
   scrollRoot: HTMLDivElement | null;
 }) {
   const dragData = { type: 'timeline-clip', clipId: clip.id } satisfies EditorDragData;
@@ -130,14 +143,18 @@ function SortableTimelineClip({
         clip={clip}
         edge="start"
         mediaDuration={media.duration ?? clip.trimEnd}
-        onSelect={onSelect}
+        onTrimCancel={onTrimCancel}
+        onTrimCommit={onTrimCommit}
+        onTrimStart={onTrimStart}
         onTrim={onTrim}
       />
       <TimelineTrimHandle
         clip={clip}
         edge="end"
         mediaDuration={media.duration ?? clip.trimEnd}
-        onSelect={onSelect}
+        onTrimCancel={onTrimCancel}
+        onTrimCommit={onTrimCommit}
+        onTrimStart={onTrimStart}
         onTrim={onTrim}
       />
     </div>
@@ -152,12 +169,19 @@ export function EditorTimeline({
   filmstripManager,
   currentTimelineTime,
   canDeleteSelectedClip,
+  canRedo,
   canSplitSelectedClip,
+  canUndo,
   onDeleteSelectedClip,
+  onRedo,
   onSeek,
   onSelectClip,
   onSplitSelectedClip,
+  onTrimCancel,
+  onTrimCommit,
   onTrimClip,
+  onTrimStart,
+  onUndo,
 }: EditorTimelineProps) {
   const { isOver, setNodeRef } = useDroppable({ id: timelineTrackDndId });
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null);
@@ -204,6 +228,24 @@ export function EditorTimeline({
       <div className="timeline-toolbar-shell">
         <strong>Dòng thời gian</strong>
         <div className="timeline-actions-shell">
+          <button
+            type="button"
+            disabled={!canUndo}
+            aria-keyshortcuts="Control+Z Meta+Z"
+            onClick={onUndo}
+          >
+            <span aria-hidden="true">↶</span>
+            Hoàn tác
+          </button>
+          <button
+            type="button"
+            disabled={!canRedo}
+            aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+            onClick={onRedo}
+          >
+            <span aria-hidden="true">↷</span>
+            Làm lại
+          </button>
           <button type="button" disabled={!canSplitSelectedClip} onClick={onSplitSelectedClip}>
             <span aria-hidden="true">✂</span>
             Tách
@@ -258,7 +300,10 @@ export function EditorTimeline({
                           media={media}
                           isSelected={clip.id === selectedClipId}
                           onSelect={onSelectClip}
+                          onTrimCancel={onTrimCancel}
+                          onTrimCommit={onTrimCommit}
                           onTrim={onTrimClip}
+                          onTrimStart={onTrimStart}
                           scrollRoot={scrollRoot}
                         />
                       ) : null;

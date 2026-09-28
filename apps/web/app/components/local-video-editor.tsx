@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import type { ChangeEvent } from 'react';
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { EditorDragOverlay } from './editor-drag-overlay';
 import { EditorTimeline } from './editor-timeline';
 import { MediaLibrary } from './media-library';
@@ -49,12 +49,24 @@ import {
   type TimelineClip,
   type TimelineTrimEdge,
 } from '../lib/timeline';
+import {
+  beginTimelineTrimTransaction,
+  cancelTimelineTrimTransaction,
+  clearTimelineHistory,
+  commitTimelineEdit,
+  commitTimelineTrimTransaction,
+  createTimelineHistoryState,
+  redoTimelineEdit,
+  setTimelineHistorySelection,
+  undoTimelineEdit,
+  updateTimelineTrimTransaction,
+  type TimelineHistoryState,
+} from '../lib/timeline-history';
 
 interface EditorState {
   mediaItems: LocalMediaItem[];
   activeMediaId: string | null;
-  timelineClips: TimelineClip[];
-  selectedClipId: string | null;
+  timelineHistory: TimelineHistoryState;
 }
 
 type MediaItemChanges = Partial<
@@ -83,7 +95,12 @@ type EditorAction =
       leftClipId: string;
       rightClipId: string;
     }
-  | { type: 'delete-timeline-clip'; clipId: string };
+  | { type: 'delete-timeline-clip'; clipId: string }
+  | { type: 'begin-timeline-trim'; clipId: string }
+  | { type: 'commit-timeline-trim' }
+  | { type: 'cancel-timeline-trim' }
+  | { type: 'undo-timeline-edit' }
+  | { type: 'redo-timeline-edit' };
 
 interface ManagedMediaResource {
   objectUrl: string;
@@ -99,8 +116,7 @@ interface PreviewWorkspaceProps {
 const initialEditorState: EditorState = {
   mediaItems: [],
   activeMediaId: null,
-  timelineClips: [],
-  selectedClipId: null,
+  timelineHistory: createTimelineHistoryState(),
 };
 
 const editorCollisionDetection: CollisionDetection = (arguments_) => {
@@ -145,28 +161,49 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
           ? (mediaItems[Math.min(removedIndex, mediaItems.length - 1)]?.id ?? null)
           : state.activeMediaId;
 
-      return { ...state, mediaItems, activeMediaId };
-    }
-    case 'add-timeline-clip':
       return {
         ...state,
-        timelineClips: insertTimelineClip(state.timelineClips, action.clip, action.insertionIndex),
+        mediaItems,
+        activeMediaId,
+        timelineHistory: clearTimelineHistory(state.timelineHistory),
+      };
+    }
+    case 'add-timeline-clip': {
+      const timelineHistory = commitTimelineEdit(state.timelineHistory, {
+        clips: insertTimelineClip(
+          state.timelineHistory.present.clips,
+          action.clip,
+          action.insertionIndex,
+        ),
         selectedClipId: action.clip.id,
+      });
+
+      return {
+        ...state,
+        timelineHistory,
         activeMediaId: action.clip.mediaId,
       };
+    }
     case 'reorder-timeline-clips':
-      return { ...state, timelineClips: action.clips };
+      return {
+        ...state,
+        timelineHistory: commitTimelineEdit(state.timelineHistory, {
+          clips: action.clips,
+          selectedClipId: state.timelineHistory.present.selectedClipId,
+        }),
+      };
     case 'select-timeline-clip':
-      return state.timelineClips.some((clip) => clip.id === action.clip.id)
+      return state.timelineHistory.present.clips.some((clip) => clip.id === action.clip.id)
         ? {
             ...state,
-            selectedClipId: action.clip.id,
+            timelineHistory: setTimelineHistorySelection(state.timelineHistory, action.clip.id),
             activeMediaId: action.clip.mediaId,
           }
         : state;
     case 'trim-timeline-clip': {
-      const clipIndex = state.timelineClips.findIndex((clip) => clip.id === action.clipId);
-      const clip = state.timelineClips[clipIndex];
+      const present = state.timelineHistory.present;
+      const clipIndex = present.clips.findIndex((clip) => clip.id === action.clipId);
+      const clip = present.clips[clipIndex];
 
       if (!clip) {
         return state;
@@ -183,54 +220,108 @@ function editorReducer(state: EditorState, action: EditorAction): EditorState {
         return state;
       }
 
-      const timelineClips = [...state.timelineClips];
-      timelineClips[clipIndex] = trimmedClip;
+      const clips = [...present.clips];
+      clips[clipIndex] = trimmedClip;
 
       return {
         ...state,
-        timelineClips,
-        selectedClipId: clip.id,
+        timelineHistory: updateTimelineTrimTransaction(state.timelineHistory, {
+          clips,
+          selectedClipId: clip.id,
+        }),
         activeMediaId: clip.mediaId,
       };
     }
     case 'split-timeline-clip': {
-      const originalClip = state.timelineClips.find((clip) => clip.id === action.clipId);
-      const timelineClips = splitTimelineClip(
-        state.timelineClips,
+      const originalClip = state.timelineHistory.present.clips.find(
+        (clip) => clip.id === action.clipId,
+      );
+      const clips = splitTimelineClip(
+        state.timelineHistory.present.clips,
         action.clipId,
         action.sourceTime,
         action.leftClipId,
         action.rightClipId,
       );
 
-      if (!originalClip || !timelineClips) {
+      if (!originalClip || !clips) {
         return state;
       }
 
       return {
         ...state,
-        timelineClips,
-        selectedClipId: action.rightClipId,
+        timelineHistory: commitTimelineEdit(state.timelineHistory, {
+          clips,
+          selectedClipId: action.rightClipId,
+        }),
         activeMediaId: originalClip.mediaId,
       };
     }
     case 'delete-timeline-clip': {
-      const removedIndex = state.timelineClips.findIndex((clip) => clip.id === action.clipId);
+      const present = state.timelineHistory.present;
+      const removedIndex = present.clips.findIndex((clip) => clip.id === action.clipId);
 
       if (removedIndex === -1) {
         return state;
       }
 
-      const timelineClips = deleteTimelineClip(state.timelineClips, action.clipId);
+      const clips = deleteTimelineClip(present.clips, action.clipId);
       const selectedClip =
-        state.selectedClipId === action.clipId
-          ? (timelineClips[Math.min(removedIndex, timelineClips.length - 1)] ?? null)
-          : (timelineClips.find((clip) => clip.id === state.selectedClipId) ?? null);
+        present.selectedClipId === action.clipId
+          ? (clips[Math.min(removedIndex, clips.length - 1)] ?? null)
+          : (clips.find((clip) => clip.id === present.selectedClipId) ?? null);
 
       return {
         ...state,
-        timelineClips,
-        selectedClipId: selectedClip?.id ?? null,
+        timelineHistory: commitTimelineEdit(state.timelineHistory, {
+          clips,
+          selectedClipId: selectedClip?.id ?? null,
+        }),
+        activeMediaId: selectedClip?.mediaId ?? state.activeMediaId,
+      };
+    }
+    case 'begin-timeline-trim': {
+      const clip = state.timelineHistory.present.clips.find((item) => item.id === action.clipId);
+
+      return clip
+        ? {
+            ...state,
+            timelineHistory: beginTimelineTrimTransaction(state.timelineHistory, clip.id),
+            activeMediaId: clip.mediaId,
+          }
+        : state;
+    }
+    case 'commit-timeline-trim':
+      return {
+        ...state,
+        timelineHistory: commitTimelineTrimTransaction(state.timelineHistory),
+      };
+    case 'cancel-timeline-trim':
+      return {
+        ...state,
+        timelineHistory: cancelTimelineTrimTransaction(state.timelineHistory),
+      };
+    case 'undo-timeline-edit': {
+      const timelineHistory = undoTimelineEdit(state.timelineHistory);
+      const selectedClip = timelineHistory.present.clips.find(
+        (clip) => clip.id === timelineHistory.present.selectedClipId,
+      );
+
+      return {
+        ...state,
+        timelineHistory,
+        activeMediaId: selectedClip?.mediaId ?? state.activeMediaId,
+      };
+    }
+    case 'redo-timeline-edit': {
+      const timelineHistory = redoTimelineEdit(state.timelineHistory);
+      const selectedClip = timelineHistory.present.clips.find(
+        (clip) => clip.id === timelineHistory.present.selectedClipId,
+      );
+
+      return {
+        ...state,
+        timelineHistory,
         activeMediaId: selectedClip?.mediaId ?? state.activeMediaId,
       };
     }
@@ -242,6 +333,18 @@ type DragMovementEvent = DragMoveEvent | DragOverEvent | DragEndEvent;
 interface PointerProjection {
   clientX: number | null;
   offsetX: number | null;
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.matches('input, textarea, select') ||
+    target.isContentEditable ||
+    target.closest('[contenteditable="true"]') !== null
+  );
 }
 
 function getPointerProjection(
@@ -414,6 +517,9 @@ function PreviewWorkspace({ media, target }: PreviewWorkspaceProps) {
 
 export function LocalVideoEditor() {
   const [editorState, dispatch] = useReducer(editorReducer, initialEditorState);
+  const timelineHistory = editorState.timelineHistory;
+  const timelineClips = timelineHistory.present.clips;
+  const selectedClipId = timelineHistory.present.selectedClipId;
   const [libraryMessage, setLibraryMessage] = useState<string | null>(null);
   const [activeDragData, setActiveDragData] = useState<EditorDragData | null>(null);
   const [mediaDropIndex, setMediaDropIndex] = useState<number | null>(null);
@@ -590,7 +696,7 @@ export function LocalVideoEditor() {
   };
 
   const handleRemove = (id: string) => {
-    if (editorState.timelineClips.some((clip) => clip.mediaId === id)) {
+    if (timelineClips.some((clip) => clip.mediaId === id)) {
       setLibraryMessage('Video này đang được sử dụng trong dòng thời gian.');
       return;
     }
@@ -668,7 +774,7 @@ export function LocalVideoEditor() {
     }
 
     const pointerX = getMediaPointerClientX(event);
-    setMediaDropIndex(getMediaInsertionIndex(event, editorState.timelineClips, pointerX));
+    setMediaDropIndex(getMediaInsertionIndex(event, timelineClips, pointerX));
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -683,7 +789,7 @@ export function LocalVideoEditor() {
 
     if (dragData.type === 'media') {
       const pointerX = getMediaPointerClientX(event);
-      const insertionIndex = getMediaInsertionIndex(event, editorState.timelineClips, pointerX);
+      const insertionIndex = getMediaInsertionIndex(event, timelineClips, pointerX);
       const media = editorState.mediaItems.find((item) => item.id === dragData.mediaId);
       const clip = media?.status === 'ready' ? createTimelineClip(media.id, media.duration) : null;
 
@@ -692,10 +798,8 @@ export function LocalVideoEditor() {
         timelineChanged = true;
       }
     } else {
-      const activeIndex = editorState.timelineClips.findIndex(
-        (clip) => clip.id === dragData.clipId,
-      );
-      const overIndex = getTimelineOverIndex(event, editorState.timelineClips);
+      const activeIndex = timelineClips.findIndex((clip) => clip.id === dragData.clipId);
+      const overIndex = getTimelineOverIndex(event, timelineClips);
 
       if (
         activeIndex !== -1 &&
@@ -705,7 +809,7 @@ export function LocalVideoEditor() {
       ) {
         dispatch({
           type: 'reorder-timeline-clips',
-          clips: arrayMove(editorState.timelineClips, activeIndex, overIndex),
+          clips: arrayMove(timelineClips, activeIndex, overIndex),
         });
         timelineChanged = true;
       }
@@ -725,25 +829,23 @@ export function LocalVideoEditor() {
     scheduleDndClickRelease();
   };
 
-  const timelineDuration = getTimelineDuration(editorState.timelineClips);
+  const timelineDuration = getTimelineDuration(timelineClips);
   const safeTimelineTime = clampTimelineTime(currentTimelineTime, timelineDuration);
   const mediaDurations = useMemo(
     () => new Map(editorState.mediaItems.map((media) => [media.id, media.duration])),
     [editorState.mediaItems],
   );
   const timelinePosition = useMemo(
-    () => getTimelinePositionAtTime(editorState.timelineClips, safeTimelineTime, mediaDurations),
-    [editorState.timelineClips, mediaDurations, safeTimelineTime],
+    () => getTimelinePositionAtTime(timelineClips, safeTimelineTime, mediaDurations),
+    [timelineClips, mediaDurations, safeTimelineTime],
   );
-  const selectedTimelineClip =
-    editorState.timelineClips.find((clip) => clip.id === editorState.selectedClipId) ?? null;
-  const selectedSplitSourceTime = editorState.selectedClipId
-    ? getTimelineSplitSourceTime(
-        editorState.timelineClips,
-        editorState.selectedClipId,
-        safeTimelineTime,
-      )
+  const selectedTimelineClip = timelineClips.find((clip) => clip.id === selectedClipId) ?? null;
+  const selectedSplitSourceTime = selectedClipId
+    ? getTimelineSplitSourceTime(timelineClips, selectedClipId, safeTimelineTime)
     : null;
+  const isTrimTransactionActive = timelineHistory.trimTransactionStart !== null;
+  const canUndoTimeline = timelineHistory.past.length > 0 && !isTrimTransactionActive;
+  const canRedoTimeline = timelineHistory.future.length > 0 && !isTrimTransactionActive;
   const libraryMedia =
     editorState.mediaItems.find((item) => item.id === editorState.activeMediaId) ?? null;
   const timelineMedia =
@@ -788,13 +890,30 @@ export function LocalVideoEditor() {
     }
   };
 
+  const handleTimelineTrimStart = (clip: TimelineClip) => {
+    dispatch({ type: 'begin-timeline-trim', clipId: clip.id });
+    setPreviewControlMode('timeline');
+  };
+
+  const handleTimelineTrimCommit = () => {
+    dispatch({ type: 'commit-timeline-trim' });
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  };
+
+  const handleTimelineTrimCancel = () => {
+    dispatch({ type: 'cancel-timeline-trim' });
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  };
+
   const handleTimelineClipTrim = (
     clipId: string,
     edge: TimelineTrimEdge,
     requestedSourceTime: number,
     mediaDuration: number,
   ) => {
-    const currentClip = editorState.timelineClips.find((clip) => clip.id === clipId);
+    const currentClip = timelineClips.find((clip) => clip.id === clipId);
 
     if (!currentClip) {
       return;
@@ -838,10 +957,7 @@ export function LocalVideoEditor() {
       return;
     }
 
-    const nextTimelineClips = deleteTimelineClip(
-      editorState.timelineClips,
-      selectedTimelineClip.id,
-    );
+    const nextTimelineClips = deleteTimelineClip(timelineClips, selectedTimelineClip.id);
 
     dispatch({ type: 'delete-timeline-clip', clipId: selectedTimelineClip.id });
     setCurrentTimelineTime((time) =>
@@ -850,6 +966,61 @@ export function LocalVideoEditor() {
     setPreviewControlMode('timeline');
     setPreviewRequestVersion((version) => version + 1);
   };
+
+  const handleUndoTimeline = useCallback(() => {
+    const previousSnapshot = timelineHistory.past.at(-1);
+
+    if (!previousSnapshot || timelineHistory.trimTransactionStart) {
+      return;
+    }
+
+    dispatch({ type: 'undo-timeline-edit' });
+    setCurrentTimelineTime((time) =>
+      clampTimelineTime(time, getTimelineDuration(previousSnapshot.clips)),
+    );
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  }, [timelineHistory]);
+
+  const handleRedoTimeline = useCallback(() => {
+    const nextSnapshot = timelineHistory.future[0];
+
+    if (!nextSnapshot || timelineHistory.trimTransactionStart) {
+      return;
+    }
+
+    dispatch({ type: 'redo-timeline-edit' });
+    setCurrentTimelineTime((time) =>
+      clampTimelineTime(time, getTimelineDuration(nextSnapshot.clips)),
+    );
+    setPreviewControlMode('timeline');
+    setPreviewRequestVersion((version) => version + 1);
+  }, [timelineHistory]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.altKey || isEditableKeyboardTarget(event.target)) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const hasPrimaryModifier = event.ctrlKey || event.metaKey;
+      const isUndo = hasPrimaryModifier && key === 'z' && !event.shiftKey;
+      const isShiftRedo = hasPrimaryModifier && key === 'z' && event.shiftKey;
+      const isWindowsRedo = event.ctrlKey && !event.metaKey && key === 'y' && !event.shiftKey;
+
+      if (isUndo && canUndoTimeline) {
+        event.preventDefault();
+        handleUndoTimeline();
+      } else if ((isShiftRedo || isWindowsRedo) && canRedoTimeline) {
+        event.preventDefault();
+        handleRedoTimeline();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [canRedoTimeline, canUndoTimeline, handleRedoTimeline, handleUndoTimeline]);
 
   return (
     <main className="editor-shell">
@@ -878,19 +1049,26 @@ export function LocalVideoEditor() {
             <PreviewWorkspace media={previewMedia} target={previewTarget} />
           </div>
           <EditorTimeline
-            clips={editorState.timelineClips}
+            clips={timelineClips}
             mediaItems={editorState.mediaItems}
-            selectedClipId={editorState.selectedClipId}
+            selectedClipId={selectedClipId}
             mediaDropIndex={mediaDropIndex}
             filmstripManager={filmstripFrameManager}
             currentTimelineTime={safeTimelineTime}
-            canDeleteSelectedClip={selectedTimelineClip !== null}
-            canSplitSelectedClip={selectedSplitSourceTime !== null}
+            canDeleteSelectedClip={selectedTimelineClip !== null && !isTrimTransactionActive}
+            canRedo={canRedoTimeline}
+            canSplitSelectedClip={selectedSplitSourceTime !== null && !isTrimTransactionActive}
+            canUndo={canUndoTimeline}
             onDeleteSelectedClip={handleDeleteSelectedClip}
+            onRedo={handleRedoTimeline}
             onSeek={handleTimelineSeek}
             onSelectClip={handleTimelineClipSelect}
             onSplitSelectedClip={handleSplitSelectedClip}
+            onTrimCancel={handleTimelineTrimCancel}
+            onTrimCommit={handleTimelineTrimCommit}
             onTrimClip={handleTimelineClipTrim}
+            onTrimStart={handleTimelineTrimStart}
+            onUndo={handleUndoTimeline}
           />
         </div>
 
@@ -898,7 +1076,7 @@ export function LocalVideoEditor() {
           <EditorDragOverlay
             dragData={activeDragData}
             mediaItems={editorState.mediaItems}
-            timelineClips={editorState.timelineClips}
+            timelineClips={timelineClips}
           />
         </DragOverlay>
       </DndContext>
